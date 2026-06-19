@@ -135,7 +135,6 @@ jobs:
         run: |
           lcov --capture --directory build-cov \
                --output-file coverage.info \
-               --ignore-errors inconsistent \
                --no-external
           lcov --remove coverage.info '*/tests/*' '*/cli/*' \
                --output-file coverage.info
