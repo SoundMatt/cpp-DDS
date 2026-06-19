@@ -192,7 +192,7 @@ public:
     virtual std::pair<std::shared_ptr<dds::Chan<Message>>, std::error_code>
         subscribe(std::vector<SubscriberOption> opts = {}) = 0;
 
-    virtual std::error_code close() = 0;
+    virtual std::error_code close() noexcept = 0;
 };
 
 // fusa:req REQ-RELAY-014

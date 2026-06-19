@@ -76,7 +76,7 @@ static int cmd_capabilities() {
               << "    \"transports\":          [\"mock\"],\n"
               << "    \"features\":            [],\n"
               << "    \"interfaces\":          [\"IParticipant\", \"IPublisher\", \"ISubscriber\"],\n"
-              << "    \"optional_interfaces\": [\"IMetricsProvider\", \"IHealthProvider\", \"IDrainer\", \"ILoaningPublisher\"],\n"
+              << "    \"optional_interfaces\": [\"IMetricsProvider\", \"IHealthProvider\", \"IDrainer\"],\n"
               << "    \"adapt\":               true\n"
               << "}\n";
     return 0;
