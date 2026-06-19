@@ -4,7 +4,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 // relay.hpp — RELAY spec types shared across all protocol implementations.
-// Mirrors the RELAY Go package spec v1.7.
+// Mirrors the RELAY Go package spec v1.10.
 
 #pragma once
 
@@ -25,7 +25,9 @@ namespace relay {
 // ── Spec version ─────────────────────────────────────────────────────────────
 
 // fusa:req REQ-RELAY-020
-inline constexpr const char* kSpecVersion = "1.7";
+inline constexpr const char* kRelaySpecVersion = "1.10";
+// Legacy alias kept so dds::kSpecVersion (which reads from relay) still works.
+inline constexpr const char* kSpecVersion      = kRelaySpecVersion;
 
 // ── Protocol ─────────────────────────────────────────────────────────────────
 
@@ -185,7 +187,7 @@ public:
 
     virtual Protocol protocol() const noexcept = 0;
 
-    virtual std::error_code send(Message msg) = 0;
+    virtual std::error_code send(Context ctx, const Message& msg) = 0;
 
     virtual std::pair<std::shared_ptr<dds::Chan<Message>>, std::error_code>
         subscribe(std::vector<SubscriberOption> opts = {}) = 0;
@@ -197,7 +199,7 @@ public:
 class ICaller : public INode {
 public:
     virtual std::pair<Message, std::error_code>
-        call(Message req, std::chrono::milliseconds timeout) = 0;
+        call(Context ctx, const Message& req) = 0;
 };
 
 // ── Optional capability interfaces ───────────────────────────────────────────

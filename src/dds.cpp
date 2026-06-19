@@ -35,6 +35,21 @@ public:
         default:                        return "dds: unknown error";
         }
     }
+
+    // §5.2: map dds::Errc to relay::Errc sentinels via error_condition equivalence.
+    bool equivalent(int code, const std::error_condition& cond) const noexcept override {
+        if (cond.category() != relay::error_category())
+            return false;
+        auto dc = static_cast<Errc>(code);
+        auto re = static_cast<relay::Errc>(cond.value());
+        switch (dc) {
+        case Errc::topic_empty:         return re == relay::Errc::not_connected;
+        case Errc::qos_mismatch:        return re == relay::Errc::not_connected;
+        case Errc::domain_out_of_range: return re == relay::Errc::not_connected;
+        case Errc::deadline_missed:     return re == relay::Errc::timeout;
+        default:                        return false;
+        }
+    }
 };
 
 } // anonymous namespace
@@ -117,13 +132,14 @@ public:
         return relay::Protocol::DDS;
     }
 
-    std::error_code send(relay::Message msg) override {
+    std::error_code send(relay::Context ctx, const relay::Message& msg) override {
+        if (ctx.done()) return relay::ErrTimeout();
         if (msg.id.empty()) return ErrTopicEmpty();
 
         auto [pub, err] = p_->new_publisher(msg.id, default_qos());
         if (err) return err;
 
-        auto ec = pub->write(msg.payload);
+        auto ec = pub->write(ctx, msg.payload);
         pub->close();
         return ec;
     }
