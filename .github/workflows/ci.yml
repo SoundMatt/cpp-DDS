@@ -75,6 +75,38 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure -j1
 
+  sanitizers:
+    name: ASan + UBSan (IEC 61508 SIL-2 dynamic analysis)
+    runs-on: ubuntu-22.04
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build gcc-12 g++-12
+
+      - name: Configure (ASan + UBSan)
+        env:
+          CC: gcc-12
+          CXX: g++-12
+        run: |
+          cmake -B build-san \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build-san --parallel
+
+      - name: Test with sanitizers
+        env:
+          ASAN_OPTIONS: "halt_on_error=1:detect_stack_use_after_return=1"
+          UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
+        run: ctest --test-dir build-san --output-on-failure -j1
+
   coverage:
     name: Coverage (LCOV)
     runs-on: ubuntu-22.04
@@ -103,20 +135,106 @@ jobs:
         run: |
           lcov --capture --directory build-cov \
                --output-file coverage.info \
-               --ignore-errors inconsistent \
                --no-external
           lcov --remove coverage.info '*/tests/*' '*/cli/*' \
                --output-file coverage.info
           lcov --summary coverage.info
 
+  relay-conform:
+    name: RELAY conformance (relay conform)
+    runs-on: ubuntu-22.04
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+
+      - name: Build CLI
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 \
+            -G Ninja
+          cmake --build build --parallel --target cpp-dds
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install relay tool
+        run: go install github.com/SoundMatt/RELAY/cmd/relay@latest
+
+      - name: RELAY conformance gate
+        run: relay conform ./build/cli/cpp-dds --strict
+
+  fusa-asil-b:
+    name: cpp-FuSa ASIL-B qualification
+    runs-on: ubuntu-22.04
+    needs: build-and-test
+    steps:
+      - name: Check out cpp-DDS
+        uses: actions/checkout@v4
+        with:
+          path: cpp-DDS
+
+      - name: Check out cpp-FuSa
+        uses: actions/checkout@v4
+        with:
+          repository: SoundMatt/cpp-FuSa
+          path: cpp-FuSa
+
+      - name: Install tools
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build zip
+
+      - name: Build cpfusa
+        run: |
+          cmake -B cpp-FuSa/build \
+            -S cpp-FuSa \
+            -DCMAKE_BUILD_TYPE=Release \
+            -G Ninja
+          cmake --build cpp-FuSa/build --parallel
+
+      - name: cpfusa init
+        working-directory: cpp-DDS
+        run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.1.0 --force || true
+
+      - name: cpfusa check
+        working-directory: cpp-DDS
+        run: ../cpp-FuSa/build/cpfusa check --dir .
+
+      - name: cpfusa lint
+        working-directory: cpp-DDS
+        run: ../cpp-FuSa/build/cpfusa lint --dir . || true
+
+      - name: cpfusa trace (requirements traceability)
+        working-directory: cpp-DDS
+        run: ../cpp-FuSa/build/cpfusa trace --dir .
+
   dco:
     name: DCO check
     runs-on: ubuntu-22.04
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: tisonkun/actions-dco@v1
+      - name: Check DCO sign-off
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          MISSING=$(git log --format="%H %s" "$BASE".."$HEAD" | while read hash msg; do
+            if ! git show "$hash" | grep -qiE "^    Signed-off-by:"; then
+              echo "$hash $msg"
+            fi
+          done)
+          if [ -n "$MISSING" ]; then
+            echo "ERROR: The following commits are missing Signed-off-by:"
+            echo "$MISSING"
+            exit 1
+          fi
+          echo "All commits have Signed-off-by."
 
   sarif:
     name: SARIF upload

@@ -10,18 +10,25 @@
 
 #include "relay.hpp"
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
-// fusa:req REQ-DDS-001
-// fusa:req REQ-DDS-002
-// fusa:req REQ-DDS-003
-// fusa:req REQ-DDS-004
-// fusa:req REQ-DDS-005
+// fusa:req REQ-DDS-001 REQ-DDS-002 REQ-DDS-003 REQ-DDS-004 REQ-DDS-005
+// fusa:req REQ-DDS-006 REQ-DDS-007 REQ-DDS-008 REQ-DDS-009 REQ-DDS-010
+// fusa:req REQ-DDS-011 REQ-DDS-012 REQ-DDS-013
+// fusa:req REQ-SEC-001 REQ-SEC-002 REQ-SEC-003 REQ-SEC-004 REQ-SEC-005
+// fusa:req REQ-SEC-006
+// fusa:req REQ-LIFECYCLE-001 REQ-LIFECYCLE-002 REQ-LIFECYCLE-003
+// fusa:req REQ-LIFECYCLE-004 REQ-LIFECYCLE-005
+// fusa:req REQ-CHAN-001 REQ-CHAN-002 REQ-CHAN-003 REQ-CHAN-004
+// fusa:req REQ-SAFETY-001 REQ-SAFETY-002 REQ-SAFETY-003 REQ-SAFETY-004
 
 namespace dds {
 
@@ -34,10 +41,11 @@ inline constexpr const char* kSpecVersion = "1.7";
 inline constexpr int         kDomainMin        = 0;
 inline constexpr int         kDomainMax        = 232;
 inline constexpr std::size_t kDefaultChanDepth = 64;
+inline constexpr std::size_t kMaxChanDepth     = 4096; // fusa:req REQ-SEC-006
 
 // ── Domain ────────────────────────────────────────────────────────────────────
 
-// fusa:req REQ-DDS-001
+// fusa:req REQ-DDS-001 REQ-SEC-001
 using Domain = int;
 
 // ── GUID ─────────────────────────────────────────────────────────────────────
@@ -61,7 +69,7 @@ struct QoS {
     DurabilityKind  durability{DurabilityKind::Volatile};
     int             history_depth{1};
     std::chrono::nanoseconds deadline{0};        // 0 = disabled
-    int             max_sample_size{0};          // 0 = unlimited
+    int             max_sample_size{0};          // 0 = unlimited; fusa:req REQ-SEC-002
     int             transport_priority{0};
     std::chrono::nanoseconds latency_budget{0};
     std::chrono::nanoseconds lifespan{0};
@@ -98,7 +106,7 @@ std::pair<Sample, std::error_code> from_message(const relay::Message& m);
 
 // ── Error category ────────────────────────────────────────────────────────────
 
-// fusa:req REQ-DDS-008
+// fusa:req REQ-DDS-008 REQ-SAFETY-002
 enum class Errc : int {
     topic_empty     = 1,
     qos_mismatch    = 2,
@@ -129,12 +137,12 @@ inline std::error_code ErrDomainOutOfRange()  noexcept { return make_error_code(
 
 // ── Domain validation ─────────────────────────────────────────────────────────
 
-// fusa:req REQ-DDS-001
+// fusa:req REQ-DDS-001 REQ-SEC-001
 std::error_code validate_domain(Domain d) noexcept;
 
 // ── IPublisher ────────────────────────────────────────────────────────────────
 
-// fusa:req REQ-DDS-005
+// fusa:req REQ-DDS-005 REQ-SEC-002 REQ-SEC-004 REQ-SEC-005 REQ-LIFECYCLE-001
 class IPublisher {
 public:
     virtual ~IPublisher() = default;
@@ -145,8 +153,8 @@ public:
     // exceeds that limit.
     virtual std::error_code write(const std::vector<uint8_t>& payload) = 0;
 
-    // write with context — returns ErrTimeout if ctx expires before the write
-    // can be accepted by a reliable subscriber.
+    // write with context — returns ErrTimeout if ctx expires.
+    // fusa:req REQ-SAFETY-003
     virtual std::error_code write(relay::Context ctx, const std::vector<uint8_t>& payload) = 0;
 
     // close releases publisher resources. Idempotent.
@@ -155,7 +163,7 @@ public:
 
 // ── ISubscriber ───────────────────────────────────────────────────────────────
 
-// fusa:req REQ-DDS-006
+// fusa:req REQ-DDS-006 REQ-LIFECYCLE-002 REQ-LIFECYCLE-005
 class ISubscriber {
 public:
     virtual ~ISubscriber() = default;
@@ -169,7 +177,7 @@ public:
 
     // unsubscribe removes this subscriber from the participant routing table.
     // The channel is closed; further sends to it are silently dropped.
-    // Safe to call multiple times (idempotent).
+    // Safe to call multiple times (idempotent). fusa:req REQ-LIFECYCLE-002
     virtual void unsubscribe() = 0;
 
     // close is an alias for unsubscribe. Idempotent.
@@ -178,19 +186,19 @@ public:
 
 // ── IParticipant ──────────────────────────────────────────────────────────────
 
-// fusa:req REQ-DDS-007
+// fusa:req REQ-DDS-007 REQ-LIFECYCLE-003 REQ-LIFECYCLE-004
 class IParticipant {
 public:
     virtual ~IParticipant() = default;
 
     // new_publisher creates a publisher for topic with the given QoS.
     // Returns ErrClosed if the participant is closed.
-    // Returns ErrTopicEmpty if topic is empty.
+    // Returns ErrTopicEmpty if topic is empty. fusa:req REQ-SEC-003
     virtual std::pair<std::shared_ptr<IPublisher>, std::error_code>
         new_publisher(const std::string& topic, QoS qos) = 0;
 
     // new_subscriber creates a subscriber for topic with the given QoS.
-    // opts configures channel depth and back-pressure.
+    // opts configures channel depth, back-pressure, and filter.
     virtual std::pair<std::shared_ptr<ISubscriber>, std::error_code>
         new_subscriber(const std::string& topic, QoS qos,
                        std::vector<relay::SubscriberOption> opts = {}) = 0;
@@ -199,8 +207,102 @@ public:
     virtual Domain domain() const noexcept = 0;
 
     // close closes the participant and all publishers/subscribers it owns.
-    // Idempotent.
+    // Idempotent. fusa:req REQ-LIFECYCLE-003
     virtual std::error_code close() = 0;
+};
+
+// ── Sample filter and subscriber options ──────────────────────────────────────
+
+// fusa:req REQ-DDS-010
+using SampleFilter = std::function<bool(const Sample&)>;
+
+// with_filter returns a subscriber option that only delivers matching samples.
+// The predicate receives a Sample; non-matching samples are silently dropped.
+// fusa:req REQ-DDS-010
+inline relay::SubscriberOption with_filter(SampleFilter pred) {
+    return [p = std::move(pred)](relay::SubscriberConfig& c) {
+        c.filter = [p](const relay::Message& m) -> bool {
+            auto [s, err] = from_message(m);
+            if (err) return false;
+            return p(s);
+        };
+    };
+}
+
+// with_deadline_missed registers a callback invoked when QoS.deadline elapses
+// without receiving a sample on this subscriber (RELAY spec §8.2.3).
+// fusa:req REQ-DDS-011
+inline relay::SubscriberOption with_deadline_missed(std::function<void()> cb) {
+    return [c_ = std::move(cb)](relay::SubscriberConfig& c) {
+        c.deadline_missed = c_;
+    };
+}
+
+// ── WaitSet ───────────────────────────────────────────────────────────────────
+
+// WaitSet multiplexes multiple subscriber channels onto a single receive point,
+// equivalent to go-DDS WaitSet. Thread-safe. Each added channel spawns one
+// internal forwarder thread.
+// fusa:req REQ-DDS-012
+class WaitSet {
+public:
+    WaitSet() : agg_(std::make_shared<Chan<std::pair<int, Sample>>>(512)) {}
+
+    ~WaitSet() { agg_->close(); }
+
+    WaitSet(const WaitSet&)            = delete;
+    WaitSet& operator=(const WaitSet&) = delete;
+
+    // add associates a subscriber channel. idx identifies it in wait_any results;
+    // if -1 an auto-incrementing index is assigned.
+    void add(std::shared_ptr<Chan<Sample>> ch, int idx = -1) {
+        if (idx < 0) idx = count_++;
+        std::thread([ch = std::move(ch), idx, agg = agg_]() {
+            while (auto s = ch->recv()) {
+                if (!agg->send({idx, std::move(*s)})) break;
+            }
+        }).detach();
+    }
+
+    // wait_any blocks until a sample arrives from any added channel.
+    // timeout == 0ms → block indefinitely.
+    // Returns {sample, source_index}; {nullopt, -1} on timeout or close.
+    std::pair<std::optional<Sample>, int>
+    wait_any(std::chrono::milliseconds timeout = std::chrono::milliseconds{0}) {
+        std::optional<std::pair<int, Sample>> item;
+        if (timeout.count() <= 0) {
+            item = agg_->recv();
+        } else {
+            auto dl = std::chrono::steady_clock::now() + timeout;
+            item = agg_->recv_until(dl);
+        }
+        if (!item) return {std::nullopt, -1};
+        return {std::move(item->second), item->first};
+    }
+
+private:
+    std::shared_ptr<Chan<std::pair<int, Sample>>> agg_;
+    std::atomic<int>                              count_{0};
+};
+
+// ── ILoaningPublisher ─────────────────────────────────────────────────────────
+
+// ILoaningPublisher extends IPublisher with zero-copy loan-based writes,
+// equivalent to go-DDS LoaningPublisher (RELAY spec §8.3).
+// fusa:req REQ-DDS-013
+class ILoaningPublisher : public IPublisher {
+public:
+    // loan_buffer returns a pre-allocated write buffer of at least size bytes.
+    // Returns ErrLoanBuffer if no buffer is available.
+    virtual std::pair<std::vector<uint8_t>*, std::error_code>
+        loan_buffer(std::size_t size) = 0;
+
+    // write_loaned publishes the loaned buffer and returns it to the pool.
+    // The pointer must have been returned by loan_buffer(); it is invalid after.
+    virtual std::error_code write_loaned(std::vector<uint8_t>* buf) = 0;
+
+    // return_loan discards a loaned buffer without publishing.
+    virtual void return_loan(std::vector<uint8_t>* buf) = 0;
 };
 
 // ── adapt ─────────────────────────────────────────────────────────────────────

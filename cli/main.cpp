@@ -5,10 +5,16 @@
 
 // cpp-dds — RELAY-conformant DDS CLI tool.
 //
-// Subcommands:
-//   version    Print version and spec information.
+// Mandatory subcommands (§11.1):
+//   version [--format text|json]    Print version and spec information.
+//   capabilities                    Emit capabilities document as JSON.
+//   status [--format text|json]     Self-assessed health status.
+//
+// Optional subcommands (§11.2):
 //   conform    Basic RELAY conformance self-check.
 //   convert    Parse a dds-sample JSON vector and echo it back.
+
+// fusa:req REQ-CLI-001 REQ-CLI-002 REQ-CLI-003
 
 #include <dds/dds.hpp>
 #include <dds/mock/participant.hpp>
@@ -16,20 +22,92 @@
 #include <iostream>
 #include <string>
 
-static constexpr const char* kVersion    = "0.1.0";
+static constexpr const char* kTool        = "cpp-dds";
+static constexpr const char* kVersion     = "0.1.0";
 static constexpr const char* kSpecVersion = dds::kSpecVersion;
+static constexpr const char* kLanguage    = "cpp";
+static constexpr const char* kRuntime     = "c++17";
+static constexpr int         kProtocolInt = 2;  // DDS
+static constexpr const char* kProtocol    = "DDS";
 
-// ── subcommands ───────────────────────────────────────────────────────────────
+// ── helper ────────────────────────────────────────────────────────────────────
 
-static int cmd_version() {
-    std::cout << "cpp-dds " << kVersion << "\n"
-              << "relay-spec: " << kSpecVersion << "\n"
-              << "protocol: DDS\n";
+static std::string format_flag(int argc, char* argv[], int from) {
+    for (int i = from; i < argc - 1; ++i) {
+        if (std::string(argv[i]) == "--format")
+            return argv[i + 1];
+    }
+    return "text";
+}
+
+// ── §12.1 version ─────────────────────────────────────────────────────────────
+
+// fusa:req REQ-CLI-001
+static int cmd_version(const std::string& fmt) {
+    if (fmt == "json") {
+        std::cout << "{\n"
+                  << "    \"tool\":         \"" << kTool        << "\",\n"
+                  << "    \"protocol\":     \"" << kProtocol    << "\",\n"
+                  << "    \"protocol_int\": "   << kProtocolInt << ",\n"
+                  << "    \"version\":      \"" << kVersion     << "\",\n"
+                  << "    \"spec_version\": \"" << kSpecVersion << "\",\n"
+                  << "    \"language\":     \"" << kLanguage    << "\",\n"
+                  << "    \"runtime\":      \"" << kRuntime     << "\"\n"
+                  << "}\n";
+    } else {
+        std::cout << kTool << " " << kVersion << "\n"
+                  << "relay-spec: " << kSpecVersion << "\n"
+                  << "protocol: " << kProtocol << "\n";
+    }
     return 0;
 }
 
+// ── §12.2 capabilities ────────────────────────────────────────────────────────
+
+static int cmd_capabilities() {
+    std::cout << "{\n"
+              << "    \"kind\":                \"capabilities\",\n"
+              << "    \"tool\":                \"" << kTool        << "\",\n"
+              << "    \"protocol\":            \"" << kProtocol    << "\",\n"
+              << "    \"protocol_int\":        "   << kProtocolInt << ",\n"
+              << "    \"version\":             \"" << kVersion     << "\",\n"
+              << "    \"spec_version\":        \"" << kSpecVersion << "\",\n"
+              << "    \"commands\":            [\"version\", \"capabilities\", \"status\", \"conform\", \"convert\"],\n"
+              << "    \"transports\":          [\"mock\"],\n"
+              << "    \"features\":            [\"loaning\"],\n"
+              << "    \"interfaces\":          [\"IParticipant\", \"IPublisher\", \"ISubscriber\"],\n"
+              << "    \"optional_interfaces\": [\"IMetricsProvider\", \"IHealthProvider\", \"IDrainer\", \"ILoaningPublisher\"],\n"
+              << "    \"adapt\":               true\n"
+              << "}\n";
+    return 0;
+}
+
+// ── §12.3 status ──────────────────────────────────────────────────────────────
+
+static int cmd_status(const std::string& fmt) {
+    if (fmt == "json") {
+        std::cout << "{\n"
+                  << "    \"protocol\":  \"" << kProtocol << "\",\n"
+                  << "    \"tool\":      \"" << kTool     << "\",\n"
+                  << "    \"version\":   \"" << kVersion  << "\",\n"
+                  << "    \"healthy\":   true,\n"
+                  << "    \"connected\": false,\n"
+                  << "    \"endpoint\":  \"\",\n"
+                  << "    \"details\":   {}\n"
+                  << "}\n";
+    } else {
+        std::cout << "protocol:  " << kProtocol << "\n"
+                  << "version:   " << kVersion  << "\n"
+                  << "healthy:   true\n"
+                  << "connected: false\n";
+    }
+    return 0;  // 0 = healthy
+}
+
+// ── conform (optional) ────────────────────────────────────────────────────────
+
+// fusa:req REQ-CLI-002
 static int cmd_conform() {
-    // Self-check: create a mock participant, publish, and receive a sample.
     auto [p, ec] = dds::mock::create(0);
     if (ec) {
         std::cerr << "conform: create participant failed: " << ec.message() << "\n";
@@ -60,7 +138,6 @@ static int cmd_conform() {
         return 1;
     }
 
-    // Validate domain boundary.
     if (auto ec_d = dds::validate_domain(232); ec_d) {
         std::cerr << "conform: validate_domain(232) failed: " << ec_d.message() << "\n";
         return 1;
@@ -70,7 +147,6 @@ static int cmd_conform() {
         return 1;
     }
 
-    // Test adapt().
     auto node = dds::adapt(p);
     if (node->protocol() != relay::Protocol::DDS) {
         std::cerr << "conform: adapt node protocol mismatch\n";
@@ -81,12 +157,14 @@ static int cmd_conform() {
     return 0;
 }
 
+// ── convert (optional) ────────────────────────────────────────────────────────
+
+// fusa:req REQ-CLI-003
 static int cmd_convert(const std::string& topic, const std::string& hex_payload) {
     dds::Sample s;
     s.topic     = topic;
     s.timestamp = std::chrono::system_clock::now();
 
-    // Parse hex payload (pairs of hex digits).
     if (hex_payload.size() % 2 != 0) {
         std::cerr << "convert: payload must be an even-length hex string\n";
         return 1;
@@ -113,14 +191,20 @@ static int cmd_convert(const std::string& topic, const std::string& hex_payload)
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: cpp-dds <version|conform|convert> [args...]\n";
+        std::cerr << "Usage: cpp-dds <version|capabilities|status|conform|convert> [args...]\n";
         return 1;
     }
 
     std::string cmd = argv[1];
 
     if (cmd == "version") {
-        return cmd_version();
+        return cmd_version(format_flag(argc, argv, 2));
+    }
+    if (cmd == "capabilities") {
+        return cmd_capabilities();
+    }
+    if (cmd == "status") {
+        return cmd_status(format_flag(argc, argv, 2));
     }
     if (cmd == "conform") {
         return cmd_conform();

@@ -28,6 +28,7 @@ if(MSVC)
         /W4
         /wd4100   # unreferenced formal parameter
         /wd4996   # deprecated CRT functions
+        /utf-8    # treat sources and output as UTF-8
     )
 endif()
 

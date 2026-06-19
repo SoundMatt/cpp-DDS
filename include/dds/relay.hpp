@@ -141,6 +141,10 @@ struct SubscriberConfig {
     BackPressurePolicy back_pressure{BackPressurePolicy::DropNewest};
     uint32_t           event_id{};
     std::string        topic_name;
+    // Optional message filter — null means accept all (fusa:req REQ-DDS-010)
+    std::function<bool(const Message&)> filter;
+    // Optional deadline-missed callback (fusa:req REQ-DDS-011)
+    std::function<void()>               deadline_missed;
 
     // fusa:req REQ-RELAY-019
     int effective_depth(int default_depth) const noexcept {
