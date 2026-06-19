@@ -342,7 +342,7 @@ TEST_CASE("adapt: send with empty id returns error", "[mock][REQ-DDS-009]") {
     auto node = adapt(p);
     relay::Message m;
     m.payload = {1, 2, 3};
-    CHECK(node->send(m));
+    CHECK(node->send(relay::Context::background(), m));
 }
 
 TEST_CASE("adapt: subscribe without topic returns error", "[mock][REQ-DDS-009]") {
@@ -366,7 +366,7 @@ TEST_CASE("adapt: send and subscribe round-trip via relay::Message", "[mock][REQ
     relay::Message msg;
     msg.id      = "relay/topic";
     msg.payload = {0xCA, 0xFE};
-    REQUIRE_FALSE(node1->send(msg));
+    REQUIRE_FALSE(node1->send(relay::Context::background(), msg));
 
     auto recv = ch->recv();
     REQUIRE(recv.has_value());

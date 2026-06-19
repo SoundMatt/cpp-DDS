@@ -242,8 +242,8 @@ TEST_CASE("ILoaningPublisher is a polymorphic abstract type", "[dds][REQ-DDS-013
 
 // ── kSpecVersion ──────────────────────────────────────────────────────────────
 
-TEST_CASE("kSpecVersion is 1.7", "[dds]") {
-    CHECK(std::string(kSpecVersion) == "1.7");
+TEST_CASE("kSpecVersion is 1.10", "[dds]") {
+    CHECK(std::string(kSpecVersion) == "1.10");
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────

@@ -74,7 +74,7 @@ static int cmd_capabilities() {
               << "    \"spec_version\":        \"" << kSpecVersion << "\",\n"
               << "    \"commands\":            [\"version\", \"capabilities\", \"status\", \"conform\", \"convert\"],\n"
               << "    \"transports\":          [\"mock\"],\n"
-              << "    \"features\":            [\"loaning\"],\n"
+              << "    \"features\":            [],\n"
               << "    \"interfaces\":          [\"IParticipant\", \"IPublisher\", \"ISubscriber\"],\n"
               << "    \"optional_interfaces\": [\"IMetricsProvider\", \"IHealthProvider\", \"IDrainer\", \"ILoaningPublisher\"],\n"
               << "    \"adapt\":               true\n"
