@@ -47,6 +47,9 @@ public:
         case Errc::qos_mismatch:        return re == relay::Errc::not_connected;
         case Errc::domain_out_of_range: return re == relay::Errc::not_connected;
         case Errc::deadline_missed:     return re == relay::Errc::timeout;
+        case Errc::sample_rejected:     return re == relay::Errc::payload_too_large;
+        case Errc::resource_limits:     return re == relay::Errc::payload_too_large;
+        case Errc::loan_buffer:         return re == relay::Errc::closed;
         default:                        return false;
         }
     }
@@ -175,7 +178,7 @@ public:
         return {msg_ch, {}};
     }
 
-    std::error_code close() override {
+    std::error_code close() noexcept override {
         return p_->close();
     }
 
