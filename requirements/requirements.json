@@ -4,12 +4,13 @@
     "title": "Domain type and validation",
     "text": "The system shall define a Domain type (integer) validated to the range 0–232 inclusive, returning ErrDomainOutOfRange for values outside that range.",
     "category": "functional",
-    "criticality": "high"
+    "criticality": "high",
+    "standards": ["ISO 26262 §8.4.5", "IEC 61508-3 SIL-2"]
   },
   {
     "id": "REQ-DDS-002",
     "title": "GUID type",
-    "text": "The system shall define a Guid type as a 16-byte fixed-size array, matching the DDS writer GUID encoding in relay::Message meta key dds.writer_guid.",
+    "text": "The system shall define a Guid type as a 16-byte fixed-size array, matching the DDS writer GUID encoding in relay::Message meta key dds.writer_guid as a 32-character lowercase hex string.",
     "category": "functional",
     "criticality": "medium"
   },
@@ -23,16 +24,18 @@
   {
     "id": "REQ-DDS-004",
     "title": "Sample type and message conversion",
-    "text": "The system shall define a Sample struct and implement lossless Sample::to_message() and from_message() per RELAY spec §15.7.2, including topic, payload, timestamp, seq, and writer_guid.",
+    "text": "The system shall define a Sample struct and implement lossless Sample::to_message() and from_message() per RELAY spec §15.7.2, including topic, payload, timestamp, seq, and writer_guid. The encoding must match the RELAY spec golden vector (topic=rt/chatter, seq=7, guid bytes 1–16, meta dds.writer_guid=0102030405060708090a0b0c0d0e0f10).",
     "category": "functional",
-    "criticality": "high"
+    "criticality": "high",
+    "standards": ["RELAY spec §15.7.2"]
   },
   {
     "id": "REQ-DDS-005",
     "title": "IPublisher interface",
-    "text": "The system shall define an IPublisher abstract interface with write(payload), write(ctx, payload), and close() methods, returning ErrPayloadTooLarge when QoS.max_sample_size is exceeded.",
+    "text": "The system shall define an IPublisher abstract interface with write(payload), write(ctx, payload), and close() methods, returning ErrPayloadTooLarge when QoS.max_sample_size is exceeded and ErrTimeout when the context has expired.",
     "category": "functional",
-    "criticality": "high"
+    "criticality": "high",
+    "standards": ["RELAY spec §8.2", "DO-178C §6.3.2.c"]
   },
   {
     "id": "REQ-DDS-006",
@@ -63,9 +66,39 @@
     "criticality": "high"
   },
   {
+    "id": "REQ-DDS-010",
+    "title": "SampleFilter and with_filter subscriber option",
+    "text": "The system shall provide a SampleFilter predicate type and a with_filter(pred) subscriber option that silently drops samples not matching the predicate before they reach the subscriber channel.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": ["RELAY spec §6.4"]
+  },
+  {
+    "id": "REQ-DDS-011",
+    "title": "with_deadline_missed subscriber option",
+    "text": "The system shall provide a with_deadline_missed(callback) subscriber option that invokes the callback when QoS.deadline elapses without a sample being received on the subscriber.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": ["RELAY spec §8.2.3"]
+  },
+  {
+    "id": "REQ-DDS-012",
+    "title": "WaitSet — multiplex subscriber channels",
+    "text": "The system shall provide a WaitSet class that multiplexes multiple subscriber channels onto a single wait_any() call, returning the first available sample and its source index. Equivalent to go-DDS WaitSet.",
+    "category": "functional",
+    "criticality": "medium"
+  },
+  {
+    "id": "REQ-DDS-013",
+    "title": "ILoaningPublisher — zero-copy loan-based write",
+    "text": "The system shall provide an ILoaningPublisher interface extending IPublisher with loan_buffer(), write_loaned(), and return_loan() for zero-copy sample publishing equivalent to go-DDS LoaningPublisher (RELAY spec §8.3).",
+    "category": "functional",
+    "criticality": "low"
+  },
+  {
     "id": "REQ-MOCK-001",
     "title": "Mock participant factory",
-    "text": "The system shall provide dds::mock::create(domain) returning an IParticipant that validates the domain and returns ErrDomainOutOfRange for out-of-range values.",
+    "text": "The system shall provide dds::mock::create(domain) returning an IMockParticipant that validates the domain and returns ErrDomainOutOfRange for out-of-range values.",
     "category": "functional",
     "criticality": "medium"
   },
@@ -96,5 +129,223 @@
     "text": "After Unsubscribe() the channel is closed, further sends are silently dropped, and calling Unsubscribe() again is a no-op per RELAY spec §6.4.",
     "category": "functional",
     "criticality": "high"
+  },
+  {
+    "id": "REQ-METRICS-001",
+    "title": "Write metrics tracking",
+    "text": "The mock participant shall track write_count and bytes_written incremented atomically on each successful IPublisher::write() call.",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["RELAY spec §9.1"]
+  },
+  {
+    "id": "REQ-METRICS-002",
+    "title": "Delivery metrics tracking",
+    "text": "The mock participant shall track deliver_count, drop_count, and bytes_delivered reflecting actual broker delivery outcomes per publish cycle.",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["RELAY spec §9.1"]
+  },
+  {
+    "id": "REQ-METRICS-003",
+    "title": "IMetricsProvider interface",
+    "text": "The mock participant shall implement relay::IMetricsProvider, exposing an atomic snapshot of all counters via metrics() with no side effects.",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["RELAY spec §9.1"]
+  },
+  {
+    "id": "REQ-HEALTH-001",
+    "title": "IHealthProvider — healthy status",
+    "text": "The mock participant shall implement relay::IHealthProvider, returning HealthStatus::OK while active.",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["RELAY spec §9.2"]
+  },
+  {
+    "id": "REQ-HEALTH-002",
+    "title": "IHealthProvider — degraded on close",
+    "text": "After close() the mock participant's health() shall return HealthStatus::Down.",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["RELAY spec §9.2"]
+  },
+  {
+    "id": "REQ-SEC-001",
+    "title": "Domain boundary enforcement",
+    "text": "The system shall reject any domain identifier outside 0–232 inclusive before any object is created, preventing access to out-of-range DDS domains.",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["ISO 26262 ASIL-B §5.4.8", "IEC 61508-3 SIL-2", "NIST SP 800-53 SI-10"]
+  },
+  {
+    "id": "REQ-SEC-002",
+    "title": "Payload size enforcement",
+    "text": "When QoS.max_sample_size > 0 the system shall reject payloads exceeding that size with ErrPayloadTooLarge, preventing heap exhaustion from oversized samples.",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["NIST SP 800-53 SI-16", "ISO 26262 ASIL-B §8.4.5"]
+  },
+  {
+    "id": "REQ-SEC-003",
+    "title": "Topic name validation",
+    "text": "The system shall reject empty topic names with ErrTopicEmpty at the IParticipant level, preventing creation of publishers or subscribers on unnamed topics.",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["NIST SP 800-53 SI-10"]
+  },
+  {
+    "id": "REQ-SEC-004",
+    "title": "Write-after-close rejection",
+    "text": "IPublisher::write() calls on a closed publisher or participant shall return ErrClosed without publishing any data.",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["ISO 26262 ASIL-B §8.4.5"]
+  },
+  {
+    "id": "REQ-SEC-005",
+    "title": "Concurrent state access safety",
+    "text": "All shared mutable state (Broker subscriptions, last-sample cache, participant counters) shall be protected by appropriate synchronisation primitives, ensuring data-race freedom under concurrent access.",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["ISO 26262 ASIL-B §5.4.7", "IEC 61508-3 SIL-2", "DO-178C §6.3.3"]
+  },
+  {
+    "id": "REQ-SEC-006",
+    "title": "Channel depth cap",
+    "text": "The system shall define kMaxChanDepth = 4096 as the maximum allowed channel depth, preventing unbounded memory allocation from misconfigured subscribers.",
+    "category": "security",
+    "criticality": "medium",
+    "standards": ["NIST SP 800-53 SI-16"]
+  },
+  {
+    "id": "REQ-LIFECYCLE-001",
+    "title": "IPublisher idempotent close",
+    "text": "IPublisher::close() shall be idempotent: calling it multiple times shall not produce errors or undefined behaviour.",
+    "category": "lifecycle",
+    "criticality": "high",
+    "standards": ["ISO 26262 ASIL-B §8.4.5", "DO-178C §6.4.4.2"]
+  },
+  {
+    "id": "REQ-LIFECYCLE-002",
+    "title": "ISubscriber idempotent unsubscribe",
+    "text": "ISubscriber::unsubscribe() shall be idempotent: calling it multiple times or after close() shall be a no-op.",
+    "category": "lifecycle",
+    "criticality": "high",
+    "standards": ["ISO 26262 ASIL-B §8.4.5"]
+  },
+  {
+    "id": "REQ-LIFECYCLE-003",
+    "title": "IParticipant idempotent close",
+    "text": "IParticipant::close() shall be idempotent: repeated calls shall return success without side effects.",
+    "category": "lifecycle",
+    "criticality": "high",
+    "standards": ["ISO 26262 ASIL-B §8.4.5"]
+  },
+  {
+    "id": "REQ-LIFECYCLE-004",
+    "title": "Post-close participant operations",
+    "text": "After IParticipant::close(), new_publisher() and new_subscriber() shall return ErrClosed with a null pointer.",
+    "category": "lifecycle",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-LIFECYCLE-005",
+    "title": "Subscriber destructor auto-unsubscribes",
+    "text": "The ISubscriber destructor shall automatically call unsubscribe(), ensuring the channel is closed and broker routing is cleaned up even if the caller does not explicitly unsubscribe.",
+    "category": "lifecycle",
+    "criticality": "high",
+    "standards": ["ISO 26262 ASIL-B §8.4.5"]
+  },
+  {
+    "id": "REQ-CHAN-001",
+    "title": "Chan<T> bounded FIFO semantics",
+    "text": "Chan<T> shall be a bounded FIFO channel with a configurable capacity; elements are delivered in the order inserted. The channel shall be non-copyable.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-CHAN-002",
+    "title": "Chan<T> non-blocking try_send / try_recv",
+    "text": "try_send() and try_recv() shall return immediately without blocking, returning Full/Closed or nullopt as appropriate.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": ["DO-178C §6.3.2.c"]
+  },
+  {
+    "id": "REQ-CHAN-003",
+    "title": "Chan<T> closed-channel semantics",
+    "text": "recv() on a closed and empty channel shall return nullopt immediately; send() on a closed channel shall return false immediately.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-CHAN-004",
+    "title": "Chan<T> back-pressure policies",
+    "text": "The Broker shall support three back-pressure policies: DropNewest (try_send, drop incoming when full), DropOldest (evict head, insert new), and Block (send, block sender until space available).",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-CLI-001",
+    "title": "CLI: version subcommand",
+    "text": "The cpp-dds CLI version subcommand shall print the RELAY spec version (1.7), the DDS protocol identifier (2), and the library semantic version.",
+    "category": "functional",
+    "criticality": "medium"
+  },
+  {
+    "id": "REQ-CLI-002",
+    "title": "CLI: conform subcommand",
+    "text": "The cpp-dds CLI conform subcommand shall invoke the RELAY conform gate and exit with code 0 on success, non-zero on failure.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": ["RELAY spec §11"]
+  },
+  {
+    "id": "REQ-CLI-003",
+    "title": "CLI: convert subcommand",
+    "text": "The cpp-dds CLI convert subcommand shall translate relay::Message JSON between protocol representations, printing the result to stdout.",
+    "category": "functional",
+    "criticality": "low"
+  },
+  {
+    "id": "REQ-SAFETY-001",
+    "title": "Thread-safe shared state",
+    "text": "All shared mutable state shall be protected by std::mutex, std::shared_mutex, or std::atomic; no data races shall be detectable under ASan/TSan analysis.",
+    "category": "safety",
+    "criticality": "high",
+    "standards": ["ISO 26262 ASIL-B §5.4.7", "IEC 61508-3 SIL-2 §7.4.9", "DO-178C §6.3.3"]
+  },
+  {
+    "id": "REQ-SAFETY-002",
+    "title": "Error-code return discipline",
+    "text": "All public API functions shall return std::error_code for failure signalling; no exceptions shall be thrown across public API boundaries.",
+    "category": "safety",
+    "criticality": "high",
+    "standards": ["ISO 26262 ASIL-B §8.4.5", "DO-178C §6.3.4", "IEC 61508-3 SIL-2"]
+  },
+  {
+    "id": "REQ-SAFETY-003",
+    "title": "Bounded execution time",
+    "text": "All blocking API operations shall accept a relay::Context with timeout so callers can bound execution time and detect liveness failures.",
+    "category": "safety",
+    "criticality": "high",
+    "standards": ["DO-178C §6.3.2.c", "ISO 26262 ASIL-B §7.4.11"]
+  },
+  {
+    "id": "REQ-SAFETY-004",
+    "title": "Requirements traceability",
+    "text": "Every source file shall carry fusa:req annotations linking implementation units to requirement identifiers; every test file shall carry fusa:test annotations linking test cases to the requirements they verify. The CI fusa-asil-b job shall validate that all requirements are both implemented and tested.",
+    "category": "safety",
+    "criticality": "high",
+    "standards": ["IEC 61508-3 §7.2", "ISO 26262 ASIL-B §6.5", "DO-178C §11.9"]
+  },
+  {
+    "id": "REQ-RELAY-VEC-001",
+    "title": "RELAY spec golden vector conformance",
+    "text": "Sample::to_message() and from_message() must produce output that exactly matches the RELAY spec §15.7.2 golden vector: topic=rt/chatter, payload=[104,101,108,108,111,32,100,100,115], seq=7, writer_guid bytes [1..16], meta dds.writer_guid=0102030405060708090a0b0c0d0e0f10.",
+    "category": "conformance",
+    "criticality": "high",
+    "standards": ["RELAY spec §15.7.2"]
   }
 ]

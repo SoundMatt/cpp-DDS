@@ -5,11 +5,12 @@
 
 #pragma once
 
+#include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <deque>
 #include <mutex>
 #include <optional>
-#include <cstddef>
 
 namespace dds {
 
@@ -71,6 +72,19 @@ public:
     std::optional<T> try_recv() {
         std::lock_guard<std::mutex> lk(mu_);
         if (buf_.empty()) return std::nullopt;
+        T val = std::move(buf_.front());
+        buf_.pop_front();
+        cv_not_full_.notify_one();
+        return val;
+    }
+
+    // recv_until blocks until an item is available or deadline passes.
+    // Returns nullopt on timeout or if the channel is closed and empty.
+    std::optional<T> recv_until(std::chrono::steady_clock::time_point deadline) {
+        std::unique_lock<std::mutex> lk(mu_);
+        bool got = cv_not_empty_.wait_until(lk, deadline,
+            [this]{ return !buf_.empty() || closed_; });
+        if (!got || buf_.empty()) return std::nullopt;
         T val = std::move(buf_.front());
         buf_.pop_front();
         cv_not_full_.notify_one();
