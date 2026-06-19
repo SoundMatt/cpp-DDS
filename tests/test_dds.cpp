@@ -48,7 +48,7 @@ TEST_CASE("Guid is 16-byte array", "[dds][REQ-DDS-002]") {
 }
 
 TEST_CASE("GUID known-hex encoding matches spec vector", "[dds][REQ-DDS-002][REQ-RELAY-VEC-001]") {
-    // RELAY spec §15.7.2 golden vector: writer_guid bytes [1..16]
+    // RELAY spec spec-15.7.2 golden vector: writer_guid bytes [1..16]
     // must encode to dds.writer_guid = "0102030405060708090a0b0c0d0e0f10"
     Sample s;
     s.topic = "rt/chatter";
@@ -141,7 +141,7 @@ TEST_CASE("from_message with missing guid is ok", "[dds][REQ-DDS-004]") {
 
 // ── RELAY spec golden vector ──────────────────────────────────────────────────
 
-TEST_CASE("RELAY spec §15.7.2 golden vector: to_message fields", "[dds][REQ-RELAY-VEC-001]") {
+TEST_CASE("RELAY spec spec-15.7.2 golden vector: to_message fields", "[dds][REQ-RELAY-VEC-001]") {
     // Spec vector: topic=rt/chatter, payload="hello dds" (base64 aGVsbG8gZGRz),
     // seq=7, writer_guid=[1..16], meta dds.writer_guid=0102030405060708090a0b0c0d0e0f10
     Sample s;
@@ -161,7 +161,7 @@ TEST_CASE("RELAY spec §15.7.2 golden vector: to_message fields", "[dds][REQ-REL
     CHECK(m.meta.at("dds.writer_guid") == "0102030405060708090a0b0c0d0e0f10");
 }
 
-TEST_CASE("RELAY spec §15.7.2 golden vector: from_message round-trip", "[dds][REQ-RELAY-VEC-001]") {
+TEST_CASE("RELAY spec spec-15.7.2 golden vector: from_message round-trip", "[dds][REQ-RELAY-VEC-001]") {
     relay::Message m;
     m.protocol = relay::Protocol::DDS;
     m.id       = "rt/chatter";

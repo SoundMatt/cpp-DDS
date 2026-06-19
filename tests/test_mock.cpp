@@ -139,7 +139,7 @@ TEST_CASE("unsubscribe: channel closed after unsubscribe", "[mock][REQ-MOCK-005]
     CHECK(ch->is_closed());
 }
 
-TEST_CASE("unsubscribe: idempotent — safe to call twice", "[mock][REQ-MOCK-005][REQ-LIFECYCLE-002]") {
+TEST_CASE("unsubscribe: idempotent - safe to call twice", "[mock][REQ-MOCK-005][REQ-LIFECYCLE-002]") {
     auto p = make_p();
     auto [sub, _] = p->new_subscriber("unsub2/topic", default_qos());
 
