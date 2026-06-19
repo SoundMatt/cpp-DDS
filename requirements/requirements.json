@@ -1,0 +1,100 @@
+[
+  {
+    "id": "REQ-DDS-001",
+    "title": "Domain type and validation",
+    "text": "The system shall define a Domain type (integer) validated to the range 0–232 inclusive, returning ErrDomainOutOfRange for values outside that range.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-DDS-002",
+    "title": "GUID type",
+    "text": "The system shall define a Guid type as a 16-byte fixed-size array, matching the DDS writer GUID encoding in relay::Message meta key dds.writer_guid.",
+    "category": "functional",
+    "criticality": "medium"
+  },
+  {
+    "id": "REQ-DDS-003",
+    "title": "QoS types and defaults",
+    "text": "The system shall define ReliabilityKind (BestEffort=0, Reliable=1), DurabilityKind (Volatile=0, TransientLocal=1), and QoS struct with default_qos() and reliable_qos() factory functions.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-DDS-004",
+    "title": "Sample type and message conversion",
+    "text": "The system shall define a Sample struct and implement lossless Sample::to_message() and from_message() per RELAY spec §15.7.2, including topic, payload, timestamp, seq, and writer_guid.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-DDS-005",
+    "title": "IPublisher interface",
+    "text": "The system shall define an IPublisher abstract interface with write(payload), write(ctx, payload), and close() methods, returning ErrPayloadTooLarge when QoS.max_sample_size is exceeded.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-DDS-006",
+    "title": "ISubscriber interface",
+    "text": "The system shall define an ISubscriber abstract interface with channel(), try_read(), unsubscribe(), and close() methods per RELAY spec §8.2.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-DDS-007",
+    "title": "IParticipant interface",
+    "text": "The system shall define an IParticipant abstract interface with new_publisher(), new_subscriber(), domain(), and close() methods per RELAY spec §8.2.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-DDS-008",
+    "title": "DDS error sentinels",
+    "text": "The system shall define a dds error category and the DDS-specific error codes ErrTopicEmpty, ErrQoSMismatch, ErrDeadlineMissed, ErrSampleRejected, ErrResourceLimits, ErrLoanBuffer, ErrDomainOutOfRange, each mapping to the closest relay sentinel per RELAY spec §5.3.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-DDS-009",
+    "title": "adapt() relay::INode bridge",
+    "text": "The system shall provide adapt() to wrap an IParticipant as a relay::INode, forwarding send/subscribe/close and translating relay::Message ↔ dds::Sample per §15.7.2.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-MOCK-001",
+    "title": "Mock participant factory",
+    "text": "The system shall provide dds::mock::create(domain) returning an IParticipant that validates the domain and returns ErrDomainOutOfRange for out-of-range values.",
+    "category": "functional",
+    "criticality": "medium"
+  },
+  {
+    "id": "REQ-MOCK-002",
+    "title": "Mock participant lifecycle",
+    "text": "The mock participant's close() shall be idempotent; subsequent new_publisher() and new_subscriber() calls after close shall return ErrClosed.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-MOCK-003",
+    "title": "Mock publish and in-process routing",
+    "text": "Publishing a sample via IPublisher::write() shall deliver it to all matching subscribers in the same process via the global Broker, including monotonically increasing sequence numbers.",
+    "category": "functional",
+    "criticality": "high"
+  },
+  {
+    "id": "REQ-MOCK-004",
+    "title": "Mock subscriber channel and back-pressure",
+    "text": "Each subscriber shall receive an independent channel with configurable depth and back-pressure policy (DropNewest, DropOldest, Block).",
+    "category": "functional",
+    "criticality": "medium"
+  },
+  {
+    "id": "REQ-MOCK-005",
+    "title": "Mock unsubscribe semantics",
+    "text": "After Unsubscribe() the channel is closed, further sends are silently dropped, and calling Unsubscribe() again is a no-op per RELAY spec §6.4.",
+    "category": "functional",
+    "criticality": "high"
+  }
+]

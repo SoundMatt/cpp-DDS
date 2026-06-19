@@ -1,0 +1,16 @@
+build/
+build-cov/
+build-debug/
+.cache/
+compile_commands.json
+*.sarif
+cpfusa.sarif
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+*.o
+*.a
+*.so
+*.dylib
+*.exe

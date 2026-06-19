@@ -1,0 +1,166 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }} / ${{ matrix.compiler }} / C++${{ matrix.std }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            compiler: clang-14
+            std: 17
+            cc: clang-14
+            cxx: clang++-14
+          - os: ubuntu-22.04
+            compiler: gcc-12
+            std: 17
+            cc: gcc-12
+            cxx: g++-12
+          - os: ubuntu-22.04
+            compiler: gcc-12
+            std: 20
+            cc: gcc-12
+            cxx: g++-12
+          - os: macos-14
+            compiler: clang
+            std: 17
+            cc: clang
+            cxx: clang++
+          - os: windows-2022
+            compiler: msvc
+            std: 17
+            cc: cl
+            cxx: cl
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Set up MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        shell: bash
+        env:
+          CC:  ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=${{ matrix.std }} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -j1
+
+  coverage:
+    name: Coverage (LCOV)
+    runs-on: ubuntu-22.04
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build lcov
+
+      - name: Configure (coverage build)
+        run: |
+          cmake -B build-cov \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="--coverage -O0" \
+            -DCMAKE_EXE_LINKER_FLAGS="--coverage" \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build-cov --parallel
+
+      - name: Test
+        run: ctest --test-dir build-cov --output-on-failure -j1
+
+      - name: Generate LCOV report
+        run: |
+          lcov --capture --directory build-cov \
+               --output-file coverage.info \
+               --ignore-errors inconsistent \
+               --no-external
+          lcov --remove coverage.info '*/tests/*' '*/cli/*' \
+               --output-file coverage.info
+          lcov --summary coverage.info
+
+  dco:
+    name: DCO check
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: tisonkun/actions-dco@v1
+
+  sarif:
+    name: SARIF upload
+    runs-on: ubuntu-22.04
+    needs: build-and-test
+    permissions:
+      security-events: write
+    steps:
+      - name: Check out cpp-DDS
+        uses: actions/checkout@v4
+        with:
+          path: cpp-DDS
+
+      - name: Check out cpp-FuSa
+        uses: actions/checkout@v4
+        with:
+          repository: SoundMatt/cpp-FuSa
+          path: cpp-FuSa
+
+      - name: Install tools
+        run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
+
+      - name: Build cpfusa
+        run: |
+          cmake -B cpp-FuSa/build \
+            -S cpp-FuSa \
+            -DCMAKE_BUILD_TYPE=Release \
+            -G Ninja
+          cmake --build cpp-FuSa/build --parallel
+
+      - name: cpfusa init
+        working-directory: cpp-DDS
+        run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.1.0 --force || true
+
+      - name: Generate SARIF report
+        working-directory: cpp-DDS
+        run: |
+          ../cpp-FuSa/build/cpfusa check \
+            --format sarif \
+            --output cpfusa.sarif \
+            --dir . || true
+
+      - name: Upload SARIF to GitHub Security tab
+        if: hashFiles('cpp-DDS/cpfusa.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: cpp-DDS/cpfusa.sarif
