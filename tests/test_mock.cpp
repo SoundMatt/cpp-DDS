@@ -510,7 +510,7 @@ TEST_CASE("concurrent publish from multiple threads is safe", "[mock][REQ-SEC-00
     std::vector<std::thread> threads;
     threads.reserve(kPubs);
     for (int i = 0; i < kPubs; ++i) {
-        threads.emplace_back([&p, i]() {
+        threads.emplace_back([&p, i, kMsgs]() {
             auto [pub, ec] = p->new_publisher("concurrent/topic", default_qos());
             REQUIRE_FALSE(ec);
             for (int j = 0; j < kMsgs; ++j)

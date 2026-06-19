@@ -216,11 +216,26 @@ jobs:
   dco:
     name: DCO check
     runs-on: ubuntu-22.04
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: tisonkun/actions-dco@v1
+      - name: Check DCO sign-off
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          MISSING=$(git log --format="%H %s" "$BASE".."$HEAD" | while read hash msg; do
+            if ! git show "$hash" | grep -qiE "^    Signed-off-by:"; then
+              echo "$hash $msg"
+            fi
+          done)
+          if [ -n "$MISSING" ]; then
+            echo "ERROR: The following commits are missing Signed-off-by:"
+            echo "$MISSING"
+            exit 1
+          fi
+          echo "All commits have Signed-off-by."
 
   sarif:
     name: SARIF upload
