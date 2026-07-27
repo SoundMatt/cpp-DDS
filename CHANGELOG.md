@@ -6,6 +6,26 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.4.0] — 2026-07-27
+
+### Added
+
+- RTPS Tier-1 sub-phase 2 (see `ROADMAP.md`, "Tier 1 — RTPS wire protocol",
+  phase 2 "Discovery-scoped CDR/PL_CDR encoding"): `dds::rtps::PLCDREncoder`
+  and `PLCDRDecoder`, plus `cdr_wrap_payload`/`cdr_unwrap_payload`, under
+  `include/dds/rtps/cdr.hpp` + `src/rtps/cdr.cpp`. This is the minimal
+  little-endian PL_CDR subset used to encode/decode SPDP/SEDP parameter
+  lists (RTPS 2.3 §10.2–§10.3) — deliberately separate from Tier 3's
+  general-purpose XCDR1 `cdr` library for arbitrary IDL-defined user
+  payload types, mirroring go-DDS's own `rtps/cdr.go` vs. top-level `cdr/`
+  package split. Every encode/decode path is verified byte-for-byte against
+  reference vectors produced by calling go-DDS's actual (unexported)
+  `plCDREncoder`/`plCDRDecoder`/`cdrWrapPayload`/`cdrUnwrapPayload`
+  functions directly (`tests/test_rtps_cdr.cpp` documents the exact
+  reproduction steps). Internal, additive scaffolding within `cppdds_lib`
+  — not yet wired into the public `dds::IParticipant` / `relay::INode`
+  surface, and not yet consumed by SPDP/SEDP (later Tier-1 sub-phases).
+
 ## [0.3.0] — 2026-07-27
 
 ### Added
