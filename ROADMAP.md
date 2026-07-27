@@ -23,48 +23,242 @@
 - [x] `cpp-dds` CLI (version, conform, convert)
 - [x] CI matrix: Ubuntu / macOS / Windows, C++17 and C++20
 - [x] Coverage, DCO, SARIF upload
-- [x] RELAY spec v1.10 conformance (current pin: v1.11, see §20 continuous conformance below)
+- [x] RELAY spec v1.10 conformance (current pin: v1.11, see §20 continuous conformance above)
 
-## v0.2.0 — RTPS transport
+---
 
-- [ ] `dds/rtps/participant.hpp` — pure C++ RTPS/UDP transport (no third-party DDS required)
-- [ ] SPDP discovery (multicast participant announcement)
-- [ ] SEDP endpoint matching
-- [ ] CDR serialization for payload framing
-- [ ] Reliable delivery: sliding-window ACK/NACK
-- [ ] FragmentedData for payloads > 64 KB
+## Parity gap vs. go-DDS
 
-## v0.3.0 — Security
+cpp-DDS today is ~2,200 LOC across 10 files (`dds.hpp/cpp`, `channel.hpp`, `relay.hpp/cpp`,
+`mock/participant.hpp/cpp`, plus the `cpp-dds` CLI) implementing exactly one transport:
+an in-process mock. go-DDS — the reference implementation this roadmap tracks — is ~17,000
+non-test LOC (~40,000+ including tests) across 24 packages. Concretely, go-DDS's `rtps`
+package alone (pure Go, no CGo — 17 non-test files, 4,106 LOC non-test / 10,776 LOC
+including tests) is already larger than the whole of cpp-DDS today, and it's only one of
+five architectural groups. Everything below is currently absent from cpp-DDS:
 
-- [ ] `dds/security/` — HMAC-SHA-256 message authentication
-- [ ] AES-256-GCM encryption layer
-- [ ] Topic ACL (access control per participant)
-- [ ] Anti-replay sequence number enforcement
+| Missing capability | go-DDS package(s) | Approx. LOC (non-test) |
+|---|---|---|
+| RTPS/UDP wire transport, discovery, reliability | `rtps` | 4,106 |
+| Shared-memory transport | `shmem` | — (part of 776 incl. tests) |
+| Security (auth, encryption, ACL) | `security` | — (part of 639 incl. tests) |
+| E2E safety protection | `safety` | — (part of 658 incl. tests) |
+| DDS-XTypes Dynamic Data | `xtypes` | 460 |
+| TSN QoS integration | `tsn` | — (part of 824 incl. tests) |
+| IDL parser + codegen | `idl`, `cmd/ddstool` | 1,382 + part of `cmd`'s 1,462 |
+| CDR/XCDR1 general-purpose serialization | `cdr` | — (part of 348 incl. tests) |
+| Protocol bridges | `bridge/{grpc,wan,rest}` | 1,235 |
+| Observability | `otel`, `admin`, `monitor`, `record`, `services` | 64+197+504+395+231 = 1,391 |
+| Automatic transport selection, pooling | `auto`, `pool` | — (part of 129+139 incl. tests) |
+| Optional CycloneDDS backend | `cyclone` | 413 |
 
-## v0.4.0 — Metrics and Health
+This roadmap sequences closing that gap. Per explicit direction, **Tier 1 targets full
+native RTPS wire-protocol parity** — real interop with other DDS implementations over
+UDP — not a CycloneDDS-binding shortcut and not a deferral of RTPS in favor of easier
+tiers.
 
-- [ ] `IMetricsProvider` implementation on mock and RTPS participants
-- [ ] `IHealthProvider` reporting participant and transport health
+## Target architecture — 5-library split
+
+go-DDS is executing its own split into build-independent groups under
+[go-DDS#71](https://github.com/SoundMatt/go-DDS/issues/71) (multi-module Go layout, one
+`go.mod` per group). cpp-DDS mirrors the same grouping as separate CMake targets rather
+than separate repos, since this is a single-repo C++ library. Proposed target names and
+their mapping onto the existing `include/dds/` + `src/` layout:
+
+| Group | CMake target (proposed) | `include/dds/` subtree (proposed) | go-DDS equivalents |
+|---|---|---|---|
+| ddscore | `cppdds_core` (supersedes today's `cppdds_lib`) | `dds.hpp`, `channel.hpp`, `relay.hpp`, `mock/`, `rtps/`, `shmem/`, `security/`, `pool/`, `auto/` | `dds`, `rtps`, `mock`, `shmem`, `auto`, `pool`, `security` |
+| ddsbridges | `cppdds_bridges` | `bridge/{grpc,wan,rest,mqtt,domain}/` | `bridge/{grpc,wan,rest}` (mqtt, domain not yet in go-DDS either — see Tier 4) |
+| ddstools | `cppdds_tools` | `idl/`, `cdr/`, `xtypes/` + a standalone `ddstool` CLI target (distinct from the existing `cpp-dds` conformance CLI) | `idl`, `cdr`, `xtypes`, `cmd/ddstool` |
+| ddsobservability | `cppdds_observability` | `otel/`, `admin/`, `monitor/`, `record/`, `services/` | `otel`, `admin`, `monitor`, `record`, `services` |
+| ddssafety | `cppdds_safety` | `safety/`, `tsn/` + safety evidence already at repo root (`HARA.md`, `tara.md`, `fmea.*`) | `safety`, `tsn`, `cert/` |
+
+`cppdds_core` stays the only mandatory target — mock-only builds (today's default) must
+keep working with zero new dependencies. The other four are opt-in `CPPDDS_BUILD_*`
+CMake options, same pattern as the existing `CPPDDS_BUILD_TESTS` / `CPPDDS_BUILD_CLI`.
+An umbrella `cppdds::all` INTERFACE target can link all five for convenience once they
+exist. This is a build-graph reorganization only — no target splitting happens until a
+tier actually has code to put in it; **Tier 1 is scoped entirely within `cppdds_core`**
+(RTPS lives under `dds/rtps/`, not a separate target, since go-DDS's own grouping keeps
+`rtps` in its core module too).
+
+**Naming caveat:** the group names above (`ddscore`, `ddsbridges`, `ddstools`,
+`ddsobservability`, `ddssafety`) and the per-concern directory names (`rtps`, `xtypes`,
+`tsn`, `idl`, `cdr`, `shmem`, and bridge names `mqttbr`/`wanbr`/`restbr`/`grpcbridge`/
+`domainbr`) are **proposed pending RELAY spec §13.7.2 ratification**, tracked at
+[RELAY#59](https://github.com/SoundMatt/RELAY/issues/59). That issue's registry addition
+is in draft/review, not yet normative — treat every directory and CMake target name in
+this roadmap as provisional and expect a rename pass once §13.7.2 lands.
+
+---
+
+## Tier 1 — RTPS wire protocol (v0.2.x — highest priority)
+
+Goal: real network interop over UDP, wire-compatible with other RTPS 2.3 implementations
+(go-DDS, CycloneDDS, rust-DDS once it exists) — not just mock-to-mock in one process.
+go-DDS's `rtps` package (pure Go, no CGo, targets any platform with UDP sockets) is the
+correctness oracle: port its *behavior* against the OMG RTPS 2.3 spec sections its own
+doc comments cite, not its Go idioms. Sub-phases, in dependency order (each independently
+buildable and testable against go-DDS's file of the same concern):
+
+1. **Wire types & framing** — `GuidPrefix`/`GUID` (RTPS 2.3 §9.3.1), `Locator_t`
+   (§9.3.2), `Header`/`SubmessageHeader`/DATA submessage (§9.4). Reference: `guid.go`
+   (81 LOC), `locator.go` (136 LOC), `message.go` (365 LOC).
+2. **Discovery-scoped CDR/PL_CDR encoding** — little-endian only (the de-facto standard
+   for modern RTPS), used to encode/decode SPDP/SEDP parameter lists (§10.2–§10.3).
+   Reference: `cdr.go` (193 LOC). This is a *minimal* subset sufficient for discovery
+   submessages — do not conflate it with Tier 3's general-purpose XCDR1 `cdr` library
+   for arbitrary IDL-defined user payload types; go-DDS keeps these as two separate
+   packages (`rtps/cdr.go` vs. top-level `cdr/`) and cpp-DDS should too.
+3. **UDP transport** — socket send/recv, the RTPS 2.3 §9.6.1 port-assignment formula
+   (`metaMulticast(domain) = 7400 + 250*domain`, `metaUnicast/dataUnicast` offsets),
+   multicast group `239.255.0.1`, platform-specific socket tuning (go-DDS splits this
+   Linux vs. other via `traffic_linux.go` / `traffic_other.go`, 154 + 28 LOC — expect a
+   similar `#ifdef __linux__` split in cpp-DDS). Reference: `transport.go` (205 LOC).
+4. **SPDP** — Simple Participant Discovery Protocol (§8.5.3/§9.6.1): periodic (2s)
+   multicast self-announcement plus a known-participants table. Reference: `spdp.go`
+   (379 LOC).
+5. **SEDP** — Simple Endpoint Discovery Protocol (§8.5.4/§9.6.2): per-endpoint
+   publication/subscription announcement sent unicast to every known participant's
+   meta-unicast port; incoming announcements are topic-name matched against local
+   endpoints to link readers to writers. Reference: `sedp.go` (343 LOC).
+6. **Entities & history cache** — participant/writer/reader entity lifecycle and the
+   per-endpoint HistoryCache that everything else plugs into. This is go-DDS's single
+   largest file by far (`participant.go`, 1,505 LOC — more than a third of the whole
+   `rtps` package) and is where phases 1–5 get wired together into working best-effort
+   pub/sub. Expect cpp-DDS's equivalent to be its largest new file too; scope it as its
+   own point release rather than folding it into the phase-4/5 release.
+7. **Reliable delivery** — HEARTBEAT/ACKNACK sliding-window retransmission (§8.4.9–
+   §8.4.12): a reliable writer sends HEARTBEAT after every write and periodically,
+   advertising its send-history window; a reliable reader tracks received sequence
+   numbers and sends ACKNACK on a detected gap; the writer retransmits the requested
+   range from history. Depends on phase 6's history cache. Reference: `reliable.go`
+   (231 LOC) + `persist.go` (87 LOC, TransientLocal-style durability persistence).
+8. **Fragmentation** — `FragmentedData` submessages for payloads over 64 KB. Reference:
+   `fragment.go` (231 LOC).
+9. **Loan integration** (stretch, can slip to a `v0.2.x` point release without blocking
+   the rest of Tier 1) — zero-copy loaned-sample publishing wired into the RTPS writer
+   path, backed by a pool allocator. Reference: `loan.go` (66 LOC); pairs with the
+   `pool`/`ILoaningPublisher` work below.
+10. **IPv6 / wildcard locators** (best-effort, non-gating) — go-DDS's own docs flag IPv6
+    transport as having "limited interop testing"; treat cpp-DDS's IPv6 support the same
+    way — implement it, don't gate a release on it.
+
+Suggested version sequencing (land discovery and best-effort delivery before reliable
+delivery, since reliable QoS depends on phase 6's scaffolding):
+
+- `v0.2.0` — phases 1–3 (wire types, discovery CDR, UDP transport)
+- `v0.2.1` — phases 4–5 (SPDP + SEDP discovery converges between two cpp-DDS participants)
+- `v0.2.2` — phase 6 (entities + history cache; best-effort pub/sub works end to end)
+- `v0.2.3` — phase 7 (reliable delivery)
+- `v0.2.4` — phases 8–10 (fragmentation, loan integration, IPv6)
+
+Also within `ddscore` but not RTPS-specific, carried forward from the previous roadmap
+draft and small enough to slot in opportunistically alongside Tier 1 rather than blocking
+it:
+
+- [ ] `IMetricsProvider` / `IDiscoveryMetricsProvider` / `ITopicMetricsProvider`
+      implementation on mock and RTPS participants (go-DDS: these interfaces live in the
+      core `dds` package, `dds.go`, implemented by `mock`, `rtps`, and exported by
+      `monitor`/`admin` — Tier 5)
+- [ ] `IHealthProvider` reporting participant and transport health (same source)
 - [ ] `IDrainer::close_with_drain()` on mock participant
-- [ ] Prometheus-compatible metrics export
+- [ ] `ILoaningPublisher` (zero-copy loan/commit) backed by a pool allocator;
+      `ErrLoanBuffer` for exhausted or mismatched loans (go-DDS: `pool`, 139 LOC)
+- [ ] `dds/auto/` — automatic transport selection (shmem first, fall back to RTPS/UDP;
+      go-DDS `auto`, 129 LOC) — only meaningful once both shmem and RTPS exist, so this
+      is naturally a late Tier-1-adjacent item
 
-## v0.5.0 — LoaningPublisher
+## Tier 2 — safety and security (v0.3.0)
 
-- [ ] `ILoaningPublisher` interface (zero-copy loan/commit)
-- [ ] Pool allocator backing the loaning publisher
-- [ ] `ErrLoanBuffer` for exhausted or mismatched loans
+- **`ddssafety` / E2E protection** — byte-compatible port of go-DDS's E2E wire header:
+  `E2EPublisher` prepends an 18-byte protection header (little-endian: 2-byte DataID,
+  plus CRC, sequence counter, and freshness fields) to every payload before writing;
+  `E2ESubscriber` strips the header and validates CRC, sequence counter, and sample
+  freshness on receipt (go-DDS `safety/e2e.go`, package ~658 LOC incl. tests). Wire
+  compatibility with go-DDS's header format is required here for the same reason it's
+  required for RTPS — this is cross-language interop, not just a local feature port.
+- **`security`** — HMAC-SHA-256 message authentication, AES-256-GCM encryption layer,
+  topic ACL (per-participant/per-topic `Permission` bitfield), anti-replay sequence
+  number enforcement (go-DDS `security/`, 639 LOC). Carried forward from the previous
+  roadmap draft's v0.3.0 scope, now explicitly ordered as Tier 2 rather than Tier 3.
 
-## v0.6.0 — CycloneDDS backend
+## Tier 3 — xtypes, tsn, idl, cdr (v0.4.0)
 
-- [ ] `dds/cyclone/participant.hpp` — CycloneDDS C-API wrapper
-- [ ] Optional build: `-DCPPDDS_CYCLONE=ON`
-- [ ] Interoperability tests vs go-DDS cyclone backend
+- **`xtypes`** — DDS-XTypes Dynamic Data support (go-DDS `xtypes/`, 460 LOC).
+- **`cdr`** — full XCDR1 encode/decode per OMG DDS-XTypes 1.3, for arbitrary
+  IDL-defined user payload types (go-DDS `cdr/`, 348 LOC incl. tests) — general-purpose,
+  and deliberately separate from Tier 1's discovery-only CDR subset (see Tier 1 phase 2).
+- **`idl`** — OMG IDL parser plus a C++ code generator, exposed via a standalone
+  `ddstool` CLI target under `cppdds_tools` (go-DDS `idl/`, 1,382 LOC, plus
+  `cmd/ddstool`, part of `cmd`'s 1,462 LOC — go-DDS's single largest package outside
+  `rtps`).
+- **`tsn`** — TSN (802.1) QoS fields: transport priority, latency budget, TAPRIO
+  integration. go-DDS's `tsn` package is Linux-specific with a `!linux` build-tag stub
+  for other platforms (824 LOC) — cpp-DDS should follow the same platform-gated pattern
+  (e.g. `#ifdef __linux__` plus a portable no-op stub TU), not attempt TAPRIO on macOS
+  or Windows.
 
-## Future
+## Tier 4 — bridges (v0.5.0)
 
-- WAN bridge (TLS + shared-token auth)
-- Shared-memory transport (zero-copy, same-host)
-- TSN QoS fields (transport priority, latency budget, TAPRIO)
+go-DDS itself currently ships only `grpc`, `wan`, and `rest` bridges (`bridge/`, 1,235
+LOC total) — `mqtt` and `domain` bridges named in RELAY#59's draft registry (`mqttbr`,
+`domainbr`) don't exist upstream in go-DDS yet either. cpp-DDS's Tier 4 target is
+therefore grpc + wan + rest first, matching what the reference implementation actually
+has, with mqtt/domain added opportunistically once go-DDS lands them rather than
+inventing a bridge spec ahead of the reference implementation.
+
+## Tier 5 — observability (v0.6.0)
+
+`otel`/`admin`/`monitor`/`record`/`services` equivalents (go-DDS: `otel` 64 LOC, `admin`
+197 LOC, `monitor` 504 LOC, `record` 395 LOC, `services` 231 LOC — 1,391 LOC total).
+Lowest priority per the agreed tier order; scope in detail only after Tiers 1–4 land,
+since these packages largely consume the `IMetricsProvider`/`IHealthProvider` surface
+scoped under Tier 1.
+
+---
+
+## Interop testing infrastructure (new need — not just golden vectors)
+
+RELAY's `interop` CLI command and golden vectors (e.g. the embedded `dds-sample` vector
+used by `convert --protocol DDS`, already gated in CI via the `relay-conform` job per
+§20.1/§20.2) validate **Message-level conversion**: `dds.Sample` ⇄ `relay.Message` JSON
+round-tripping. That's necessary and already works today, but it exercises zero RTPS wire
+bytes — it's a serialization-contract test, not a network-protocol test. Tier 1 needs a
+different kind of testing infrastructure entirely:
+
+- **A live second RTPS implementation on the wire.** go-DDS is the natural first target
+  since it already speaks pure-Go RTPS with no CGo dependency: bring up a go-DDS
+  participant and a cpp-DDS participant on the same host/domain and verify SPDP/SEDP
+  discovery converges and samples cross in both directions.
+- **Mirror go-DDS's own `interop` package pattern.** go-DDS gates its CycloneDDS
+  wire-compat tests behind a `go:build interop` tag (`interop/interop_test.go`,
+  `interop/doc.go`), documents prerequisites (a live CycloneDDS peer, reachable via
+  `interop/docker-compose.yml`), and configures domain/timeout via environment
+  variables (`INTEROP_DOMAIN`, `INTEROP_TIMEOUT`). cpp-DDS needs the CMake/CTest
+  equivalent: a `CPPDDS_INTEROP_TESTS` option (default `OFF`) producing a separately
+  labeled CTest suite that is excluded from the default `ctest` invocation, plus its own
+  `docker-compose.yml` bringing up a CycloneDDS peer.
+- **A dedicated, opt-in CI job.** Real UDP sockets and multicast don't fit the existing
+  build-and-test matrix unmodified — this needs network-capable CI (host or bridge
+  networking) and should run as its own job (or a scheduled/nightly job, matching how
+  go-DDS keeps it out of the default `go test` run) rather than blocking every PR.
+- **Eventual 3-way matrix**: cpp-DDS ⇄ go-DDS, cpp-DDS ⇄ CycloneDDS, cpp-DDS ⇄ rust-DDS
+  (once it exists). Land cpp-DDS ⇄ go-DDS first — both are RELAY-authored, so protocol
+  mismatches are debuggable from either side.
+
+---
+
+## Future (outside the 5-tier priority order)
+
+- **CycloneDDS backend** (`dds/cyclone/` in cpp-DDS terms) — go-DDS keeps this as an
+  *optional secondary* backend (`cyclone/`, 413 LOC) alongside its pure-Go RTPS
+  implementation, not a replacement for it. Explicitly out of scope until Tiers 1–5
+  land: RTPS is the sanctioned wire protocol for this roadmap, not a CycloneDDS-binding
+  shortcut. Revisit afterward as an interoperability nice-to-have, optional build
+  (`-DCPPDDS_CYCLONE=ON`).
+- WAN bridge deep dive (TLS + shared-token auth) beyond the Tier 4 baseline
+- Shared-memory transport (`dds/shmem/`, zero-copy, same-host — go-DDS `shmem`, 776 LOC
+  incl. tests)
 - ASIL-D uplift
-- IDL parser + C++ codegen
 - ROS 2 rmw adapter
