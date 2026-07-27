@@ -101,9 +101,12 @@ correctness oracle: port its *behavior* against the OMG RTPS 2.3 spec sections i
 doc comments cite, not its Go idioms. Sub-phases, in dependency order (each independently
 buildable and testable against go-DDS's file of the same concern):
 
-1. **Wire types & framing** — `GuidPrefix`/`GUID` (RTPS 2.3 §9.3.1), `Locator_t`
+1. [x] **Wire types & framing** — `GuidPrefix`/`GUID` (RTPS 2.3 §9.3.1), `Locator_t`
    (§9.3.2), `Header`/`SubmessageHeader`/DATA submessage (§9.4). Reference: `guid.go`
-   (81 LOC), `locator.go` (136 LOC), `message.go` (365 LOC).
+   (81 LOC), `locator.go` (136 LOC), `message.go` (365 LOC). **Done (v0.3.0):**
+   `include/dds/rtps/types.hpp` + `src/rtps/types.cpp`, verified byte-for-byte
+   against go-DDS reference vectors in `tests/test_rtps_types.cpp`. Internal to
+   `cppdds_lib` — not yet wired into `dds::IParticipant`/`relay::INode`.
 2. **Discovery-scoped CDR/PL_CDR encoding** — little-endian only (the de-facto standard
    for modern RTPS), used to encode/decode SPDP/SEDP parameter lists (§10.2–§10.3).
    Reference: `cdr.go` (193 LOC). This is a *minimal* subset sufficient for discovery

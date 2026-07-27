@@ -6,6 +6,33 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.3.0] — 2026-07-27
+
+### Added
+
+- RTPS Tier-1 sub-phase 1 (see `ROADMAP.md`, "Tier 1 — RTPS wire protocol",
+  phase 1 "Wire types & framing"): `dds::rtps::GuidPrefix`, `EntityId`,
+  `GUID` (RTPS 2.3 §9.3.1), `Locator` (§9.3.2), `ProtocolVersion`,
+  `VendorId`, `Header`, `SubmessageHeader`, `SequenceNumber`, and
+  `DataSubmessage` (§9.4), under `include/dds/rtps/types.hpp` +
+  `src/rtps/types.cpp`. Every `encode()`/`decode()` is verified byte-for-byte
+  against reference vectors produced by calling `go-DDS`'s actual
+  `rtps` package marshal functions directly (`tests/test_rtps_types.cpp`
+  documents the exact reproduction steps). This is internal, additive
+  scaffolding within `cppdds_lib` — not yet wired into the public
+  `dds::IParticipant` / `relay::INode` surface; that lands in a later
+  Tier-1 sub-phase once UDP transport and entities exist.
+- Note on versioning: `ROADMAP.md`'s "suggested version sequencing" lists
+  `v0.2.0` as the target for RTPS phases 1–3 combined and reserves `v0.3.0`
+  for Tier 2 (safety/security). `v0.2.0` was already released for unrelated
+  work before RTPS implementation began, and this release covers only
+  phase 1 (wire types) of phases 1–3, so that sequencing no longer lines up
+  literally; treat it as superseded illustrative guidance, not a
+  compatibility promise. This is a MINOR bump (new additive capability,
+  no breaking changes to the existing public surface) rather than a
+  Tier-2 release — Tier 2's actual version number will be chosen when that
+  work starts.
+
 ## [0.2.0] — 2026-07-27
 
 ### Fixed
