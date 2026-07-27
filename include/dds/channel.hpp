@@ -12,27 +12,37 @@
 #include <mutex>
 #include <optional>
 
-namespace dds {
+// relay::Channel<T> is the bundled RELAY core channel primitive (RELAY spec
+// §18.2, until the published relay.hpp binding is depended on directly per
+// §13.7.3). It lives in namespace relay — not a protocol namespace — so that
+// relay::INode (and any future protocol adapter reusing this header) stays
+// self-contained. dds::Chan<T> (below) is a compatibility alias for
+// DDS-specific call sites.
+namespace relay {
 
-// Chan<T> is a bounded, thread-safe FIFO channel.
+// Channel<T> is a bounded, thread-safe FIFO channel.
 //
 // Mirrors Go's buffered channel semantics:
 //   recv() blocks until an item is available or the channel is closed+empty.
 //   close() wakes all blocked receivers.
-//   send() blocks until capacity is available (Block back-pressure).
+//   push() blocks until capacity is available (Block back-pressure) — the
+//     spec-mandated send method (RELAY spec §18.2).
+//   send() is a synonym for push(), kept for call sites predating the
+//     relay::Channel<T> naming.
 //   try_send() is non-blocking — returns Full when at capacity.
 //   send_drop_oldest() replaces the head item when at capacity (DropOldest).
 template<typename T>
-class Chan {
+class Channel {
 public:
     enum class SendResult { Ok, Full, Closed };
 
-    explicit Chan(std::size_t capacity = 64) : capacity_(capacity) {}
+    explicit Channel(std::size_t capacity = 64) : capacity_(capacity) {}
 
-    Chan(const Chan&)            = delete;
-    Chan& operator=(const Chan&) = delete;
+    Channel(const Channel&)            = delete;
+    Channel& operator=(const Channel&) = delete;
 
-    bool send(T value) {
+    // push is the RELAY spec §18.2 blocking-send method name.
+    bool push(T value) {
         std::unique_lock<std::mutex> lk(mu_);
         cv_not_full_.wait(lk, [this]{ return closed_ || buf_.size() < capacity_; });
         if (closed_) return false;
@@ -40,6 +50,9 @@ public:
         cv_not_empty_.notify_one();
         return true;
     }
+
+    // send is a synonym for push(), retained for existing DDS call sites.
+    bool send(T value) { return push(std::move(value)); }
 
     SendResult try_send(T value) {
         std::lock_guard<std::mutex> lk(mu_);
@@ -91,14 +104,14 @@ public:
         return val;
     }
 
-    void close() {
+    void close() noexcept {
         std::lock_guard<std::mutex> lk(mu_);
         closed_ = true;
         cv_not_empty_.notify_all();
         cv_not_full_.notify_all();
     }
 
-    bool is_closed() const {
+    bool is_closed() const noexcept {
         std::lock_guard<std::mutex> lk(mu_);
         return closed_;
     }
@@ -118,5 +131,17 @@ private:
     std::size_t             capacity_;
     bool                    closed_{false};
 };
+
+} // namespace relay
+
+namespace dds {
+
+// dds::Chan<T> is a compatibility alias for relay::Channel<T>. DDS-specific
+// code (the mock broker, WaitSet, etc.) keeps using this name; it is the
+// exact same type as relay::Channel<T>, so a value handed back through
+// relay::INode::subscribe() (typed relay::Channel<Message>) and one produced
+// by dds-internal code (typed dds::Chan<Sample>) are structurally identical.
+template<typename T>
+using Chan = relay::Channel<T>;
 
 } // namespace dds

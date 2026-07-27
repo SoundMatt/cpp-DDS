@@ -193,6 +193,36 @@ TEST_CASE("participant close is idempotent", "[mock][REQ-MOCK-002][REQ-LIFECYCLE
     CHECK_FALSE(p->close());
 }
 
+TEST_CASE("participant close: previously-returned subscriber channels are closed", "[mock][REQ-LIFECYCLE-003]") {
+    auto p = make_p();
+    auto [sub, ec] = p->new_subscriber("closed/channels", default_qos());
+    REQUIRE_FALSE(ec);
+    auto ch = sub->channel();
+    CHECK_FALSE(ch->is_closed());
+
+    CHECK_FALSE(p->close());
+
+    CHECK(ch->is_closed());
+}
+
+TEST_CASE("participant close: unblocks a subscriber blocked in recv()", "[mock][REQ-LIFECYCLE-003][REQ-LIFECYCLE-006]") {
+    auto p = make_p();
+    auto [sub, ec] = p->new_subscriber("closed/blocked-recv", default_qos());
+    REQUIRE_FALSE(ec);
+    auto ch = sub->channel();
+
+    std::optional<Sample> result{Sample{}};
+    std::thread reader([&] { result = ch->recv(); });
+
+    // Give the reader a moment to block in recv() before closing.
+    std::this_thread::sleep_for(std::chrono::milliseconds{20});
+
+    CHECK_FALSE(p->close());
+    reader.join();
+
+    CHECK_FALSE(result.has_value()); // recv() unblocks with nullopt on close
+}
+
 TEST_CASE("publisher close: write returns ErrClosed after close", "[mock][REQ-DDS-005][REQ-LIFECYCLE-001][REQ-SEC-004]") {
     auto p = make_p();
     auto [pub, _] = p->new_publisher("pub/close", default_qos());

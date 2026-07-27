@@ -1,5 +1,17 @@
 # cpp-DDS Roadmap
 
+## Continuous conformance (RELAY spec §20 — ongoing, not version-gated)
+
+- [x] `relay conform --strict` CI gate
+- [x] Full x-FuSa lifecycle CI gate: check, requirements traceability, cybersecurity
+      analysis (`cpfusa cyber`), dependency vulnerability scan (`cpfusa vuln`), and the
+      tool qualification suite (`cpfusa qualify`) — §20.1 item 2
+- [x] Safety evidence: requirements registry, HARA, TARA, dFMEA — §20.4 (see README)
+- [x] SBOM + build provenance attached to every release tag — §20.5
+- [x] `convert --protocol DDS` implements the §11.2 wire contract and reproduces the
+      embedded `dds-sample` golden vector byte-for-byte; `relay interop --protocol DDS
+      --strict ./build/cli/cpp-dds` gates `relay-conform` in CI — §20.1 item 3, §20.2
+
 ## v0.1.0 — Foundation (complete)
 
 - [x] Core interfaces: `IParticipant`, `IPublisher`, `ISubscriber`
@@ -11,7 +23,7 @@
 - [x] `cpp-dds` CLI (version, conform, convert)
 - [x] CI matrix: Ubuntu / macOS / Windows, C++17 and C++20
 - [x] Coverage, DCO, SARIF upload
-- [x] RELAY spec v1.7 conformance
+- [x] RELAY spec v1.10 conformance (current pin: v1.11, see §20 continuous conformance below)
 
 ## v0.2.0 — RTPS transport
 

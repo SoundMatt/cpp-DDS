@@ -1,0 +1,97 @@
+{
+  "createdAt": "2026-07-27T00:00:00Z",
+  "project": "cpp-DDS",
+  "standard": "ISO 26262",
+  "situations": [
+    {
+      "id": "OS-001",
+      "description": "Normal operation — participants, publishers, and subscribers actively exchanging samples."
+    },
+    {
+      "id": "OS-002",
+      "description": "Participant shutdown or reconfiguration — Close()/close_with_drain() called while subscriptions are open."
+    },
+    {
+      "id": "OS-003",
+      "description": "Concurrent multi-threaded access — Send/Publish/Close invoked from different threads without external synchronisation (RELAY spec §6 req 6, 7)."
+    },
+    {
+      "id": "OS-004",
+      "description": "Resource-constrained / overload — publish rate exceeds subscriber channel capacity (back-pressure engaged)."
+    }
+  ],
+  "hazards": [
+    {
+      "id": "H-001",
+      "description": "IParticipant::close() does not close previously-returned subscriber channels, so a consumer thread blocked in recv() (directly, or via dds::adapt()'s relay::INode forwarder) never observes shutdown and continues waiting on stale/absent data instead of failing over.",
+      "situations": ["OS-002"],
+      "risk": { "severity": "S2", "exposure": "E2", "controllability": "C2", "asil": "ASIL-B" },
+      "safetyGoals": ["SG-001"]
+    },
+    {
+      "id": "H-002",
+      "description": "IPublisher::write() rejects a payload exceeding QoS.max_sample_size (ErrPayloadTooLarge), but a caller that does not check the returned std::error_code silently drops a safety-relevant command with no downstream signal.",
+      "situations": ["OS-001", "OS-004"],
+      "risk": { "severity": "S2", "exposure": "E1", "controllability": "C2", "asil": "ASIL-A" },
+      "safetyGoals": ["SG-002"]
+    },
+    {
+      "id": "H-003",
+      "description": "validate_domain() only enforces the numeric range [0,232]; it cannot detect a participant joining a range-valid but semantically wrong domain, which could route data between subsystems intended to be isolated.",
+      "situations": ["OS-001"],
+      "risk": { "severity": "S3", "exposure": "E1", "controllability": "C2", "asil": "ASIL-B" },
+      "safetyGoals": ["SG-003"]
+    },
+    {
+      "id": "H-004",
+      "description": "QoS.Deadline expiry is only reported if the caller registers with_deadline_missed(); an application that omits the callback has no signal that a sample is stale and may act on outdated data as if it were current.",
+      "situations": ["OS-001", "OS-004"],
+      "risk": { "severity": "S2", "exposure": "E2", "controllability": "C1", "asil": "ASIL-A" },
+      "safetyGoals": ["SG-004"]
+    },
+    {
+      "id": "H-005",
+      "description": "A data race between concurrent Send/Publish/Close operations on the same participant/channel could corrupt in-flight samples or crash the process, violating RELAY spec §6 req 6-7 (concurrent close, concurrent sends).",
+      "situations": ["OS-003"],
+      "risk": { "severity": "S2", "exposure": "E1", "controllability": "C1", "asil": "QM" },
+      "safetyGoals": ["SG-005"]
+    }
+  ],
+  "safetyGoals": [
+    {
+      "id": "SG-001",
+      "description": "IParticipant::close() MUST close every subscriber channel already returned via new_subscriber(), unblocking any thread blocked in recv() with a defined empty/closed result.",
+      "asil": "ASIL-B",
+      "hazardIds": ["H-001"],
+      "safeState": "All subscriber channels report is_closed() == true and recv() returns std::nullopt within one scheduling interval of close()."
+    },
+    {
+      "id": "SG-002",
+      "description": "Every IPublisher::write() call site MUST propagate and act on a non-empty std::error_code (ErrPayloadTooLarge, ErrClosed, ErrTimeout) rather than assuming success.",
+      "asil": "ASIL-A",
+      "hazardIds": ["H-002"],
+      "safeState": "Caller observes a non-empty std::error_code and does not treat the write as delivered."
+    },
+    {
+      "id": "SG-003",
+      "description": "Domain selection MUST be governed by application-level configuration review / integration testing in addition to validate_domain()'s numeric range check; cpp-DDS documents this residual risk rather than silently assuming isolation.",
+      "asil": "ASIL-B",
+      "hazardIds": ["H-003"],
+      "safeState": "Deployment configuration is reviewed so that isolated subsystems are assigned disjoint domains; documented in README / integration checklist."
+    },
+    {
+      "id": "SG-004",
+      "description": "Applications with a freshness requirement MUST register with_deadline_missed() on every subscriber that carries safety-relevant data.",
+      "asil": "ASIL-A",
+      "hazardIds": ["H-004"],
+      "safeState": "The deadline_missed callback fires and the application discards or flags the stale sample before acting on it."
+    },
+    {
+      "id": "SG-005",
+      "description": "All shared participant/channel state MUST remain race-free under concurrent Send/Publish/Close per RELAY spec §6 req 6-7, verified continuously by the ASan+UBSan CI gate (.github/workflows/ci.yml `sanitizers` job) and the concurrency test suite (REQ-SAFETY-001).",
+      "asil": "QM",
+      "hazardIds": ["H-005"],
+      "safeState": "No data race reported by ThreadSanitizer/ASan+UBSan across the concurrent test suite; process does not crash or corrupt in-flight samples."
+    }
+  ]
+}

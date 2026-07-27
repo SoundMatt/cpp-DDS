@@ -304,7 +304,7 @@
   {
     "id": "REQ-CLI-003",
     "title": "CLI: convert subcommand",
-    "text": "The cpp-dds CLI convert subcommand shall translate relay::Message JSON between protocol representations, printing the result to stdout.",
+    "text": "The cpp-dds CLI convert --protocol P [--format json] subcommand shall read a dds.Sample JSON value on stdin, run it through Sample::to_message(), and write the resulting relay.Message JSON to stdout, per RELAY spec §11.2 (exit 0 converted / 1 invalid input / 2 invalid args).",
     "category": "functional",
     "criticality": "low"
   },

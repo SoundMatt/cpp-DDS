@@ -324,8 +324,16 @@ public:
 
     Domain domain() const noexcept override { return domain_; }
 
+    // fusa:req REQ-LIFECYCLE-001 REQ-LIFECYCLE-003
     std::error_code close() override {
-        closed_.store(true);
+        if (closed_.exchange(true)) return {}; // idempotent (spec §6 req 1)
+
+        // spec §6 req 3: channels already returned via new_subscriber() MUST
+        // be closed by the implementation, unblocking any blocked recv().
+        std::lock_guard<std::mutex> lk(sub_mu_);
+        for (auto& wch : sub_channels_) {
+            if (auto ch = wch.lock()) ch->close();
+        }
         return {};
     }
 
