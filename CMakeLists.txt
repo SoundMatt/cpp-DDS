@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(cppdds
-    VERSION 0.5.0
+    VERSION 0.6.0
     DESCRIPTION "C++ DDS library — RELAY-conformant"
     HOMEPAGE_URL "https://github.com/SoundMatt/cpp-DDS"
     LANGUAGES CXX
@@ -44,6 +44,7 @@ add_library(cppdds_lib STATIC
     src/rtps/types.cpp
     src/rtps/cdr.cpp
     src/rtps/transport.cpp
+    src/rtps/spdp.cpp
 )
 
 # Platform-specific socket tuning (SO_PRIORITY / IP_TOS / SO_TXTIME /

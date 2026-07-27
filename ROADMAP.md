@@ -139,9 +139,27 @@ buildable and testable against go-DDS's file of the same concern):
    functions (`tests/test_rtps_transport.cpp` documents the exact reproduction steps).
    Internal to `cppdds_lib`, under `dds/rtps/` — not yet wired into
    `dds::IParticipant`/`relay::INode` or consumed by SPDP (phase 4, next).
-4. **SPDP** — Simple Participant Discovery Protocol (§8.5.3/§9.6.1): periodic (2s)
+4. [x] **SPDP** — Simple Participant Discovery Protocol (§8.5.3/§9.6.1): periodic (2s)
    multicast self-announcement plus a known-participants table. Reference: `spdp.go`
-   (379 LOC).
+   (379 LOC). **Done (v0.6.0):** `include/dds/rtps/spdp.hpp` + `src/rtps/spdp.cpp`
+   (`SpdpService`: announce/receive/eviction threads over `rtps::UdpSocket`, a
+   known-peers table keyed by `GuidPrefix` with 10s-default lease-based eviction,
+   configurable announce period/jitter) plus standalone
+   `build_participant_data`/`parse_participant_data` (PL_CDR_LE `ParticipantProxy`
+   encode/decode) and `wrap_in_rtps_message`/`build_spdp_announcement` (RTPS message
+   framing) functions. New `kVendorIdCppDDS` in `types.hpp` for locally-originated
+   messages. Verified byte-for-byte against go-DDS reference vectors (calling
+   go-DDS's actual `buildParticipantData`/`parseParticipantData`/
+   `wrapInRTPSMessage`/`marshalDataSubmessage` functions directly) plus behavioral
+   tests (self-announcement filtering, non-SPDP-writer filtering, lease eviction,
+   a live two-`SpdpService` loopback discovery test) in `tests/test_rtps_spdp.cpp`;
+   verified locally with Release C++17/C++20 builds and a Debug ASan/UBSan pass on
+   macOS/AppleClang, 177/177 tests. Scoped down from a full port of go-DDS's
+   `spdpService` (a method on the not-yet-ported `participant` type, phase 6): the
+   SEDP-notification hooks, liveliness callback, and optional `DiscoveryPlugin`
+   authentication-token exchange are deliberately omitted — see spdp.hpp's
+   file-level scope note. Internal to `cppdds_lib`, under `dds/rtps/` — not yet
+   wired into `dds::IParticipant`/`relay::INode` or consumed by SEDP (phase 5, next).
 5. **SEDP** — Simple Endpoint Discovery Protocol (§8.5.4/§9.6.2): per-endpoint
    publication/subscription announcement sent unicast to every known participant's
    meta-unicast port; incoming announcements are topic-name matched against local

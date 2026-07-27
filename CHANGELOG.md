@@ -6,6 +6,44 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.6.0] — 2026-07-27
+
+### Added
+
+- RTPS Tier-1 sub-phase 4 (see `ROADMAP.md`, "Tier 1 — RTPS wire protocol",
+  phase 4 "SPDP"): `dds::rtps::SpdpService` under `include/dds/rtps/spdp.hpp`
+  + `src/rtps/spdp.cpp` — periodic (2s, configurable) multicast
+  self-announcement of the local participant plus a known-participants
+  table populated from received SPDP announcements, with lease-based peer
+  eviction (once per second, 10s default lease, matching go-DDS). Also the
+  standalone `build_participant_data`/`parse_participant_data`
+  (PL_CDR_LE `ParticipantProxy` encode/decode) and
+  `wrap_in_rtps_message`/`build_spdp_announcement` (RTPS message framing)
+  functions, independently testable without a running service.
+- New `dds::rtps::kVendorIdCppDDS` (`include/dds/rtps/types.hpp`) — cpp-DDS's
+  own (unregistered) RTPS vendor ID for locally-originated messages,
+  distinct from `kVendorIdGoDDS`.
+- Every wire-format path verified byte-for-byte against reference vectors
+  produced by calling go-DDS's actual (unexported)
+  `spdpService.buildParticipantData`/`parseParticipantData`/
+  `wrapInRTPSMessage`/`marshalDataSubmessage` functions directly
+  (`tests/test_rtps_spdp.cpp` documents the exact reproduction steps), plus
+  behavioral tests of the known-peers table (self-announcement filtering,
+  non-SPDP-writer filtering, lease-based eviction with and without an
+  advertised lease PID) and a live two-`SpdpService` loopback discovery
+  test. Verified locally with Release C++17/C++20 builds and a Debug
+  ASan+UBSan pass on macOS/AppleClang; CI additionally exercises Linux/gcc-12
+  ASan+UBSan.
+- Internal, additive scaffolding within `cppdds_lib`, under `dds/rtps/` —
+  not yet wired into the public `dds::IParticipant` / `relay::INode`
+  surface. Deliberately scoped down from a full port of go-DDS's
+  `spdpService` (a method set on the not-yet-ported `participant` type,
+  Tier-1 phase 6): the SEDP-notification hooks, liveliness callback, and
+  optional `DiscoveryPlugin` authentication-token exchange are omitted, as
+  they depend on machinery from later phases / the public-API wiring phase
+  — see `include/dds/rtps/spdp.hpp`'s file-level scope note for the full
+  list of deliberate deviations.
+
 ## [0.5.0] — 2026-07-27
 
 ### Added
