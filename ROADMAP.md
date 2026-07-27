@@ -119,11 +119,26 @@ buildable and testable against go-DDS's file of the same concern):
    vectors in `tests/test_rtps_cdr.cpp`. Internal to `cppdds_lib`, under `dds/rtps/` —
    not yet wired into `dds::IParticipant`/`relay::INode` or consumed by SPDP/SEDP
    (later phases).
-3. **UDP transport** — socket send/recv, the RTPS 2.3 §9.6.1 port-assignment formula
+3. [x] **UDP transport** — socket send/recv, the RTPS 2.3 §9.6.1 port-assignment formula
    (`metaMulticast(domain) = 7400 + 250*domain`, `metaUnicast/dataUnicast` offsets),
    multicast group `239.255.0.1`, platform-specific socket tuning (go-DDS splits this
    Linux vs. other via `traffic_linux.go` / `traffic_other.go`, 154 + 28 LOC — expect a
    similar `#ifdef __linux__` split in cpp-DDS). Reference: `transport.go` (205 LOC).
+   **Done (v0.5.0):** `include/dds/rtps/transport.hpp` + `src/rtps/transport.cpp`
+   (IPv4-only `UdpSocket`: unicast bind with go-DDS's port+0..+15 retry, multicast
+   receive with unicast fallback, synchronous send/recv with a 250ms poll timeout) plus
+   `include/dds/rtps/traffic.hpp` with a real `src/rtps/traffic_linux.cpp` (SO_PRIORITY /
+   IP_TOS / SO_TXTIME / CLOCK_TAI via raw syscalls, `sendmsg` + `SCM_TXTIME` cmsg) and a
+   no-op `src/rtps/traffic_other.cpp` for every other platform, matching go-DDS's own
+   file split — CMakeLists.txt selects between them on `CMAKE_SYSTEM_NAME`. Builds and
+   passes on Windows/MSVC (Winsock2) and macOS/Linux (BSD sockets); verified locally on
+   macOS (AppleClang) and Linux/gcc-12 (Release + Debug ASan/UBSan, 161/161 tests,
+   exercising the real Linux syscall path). Port formula verified against go-DDS's own
+   `rtps/wire_test.go` `TestPortFormula` values plus additional vectors reproduced by
+   calling go-DDS's actual `metaMulticastPort`/`metaUnicastPort`/`userUnicastPort`
+   functions (`tests/test_rtps_transport.cpp` documents the exact reproduction steps).
+   Internal to `cppdds_lib`, under `dds/rtps/` — not yet wired into
+   `dds::IParticipant`/`relay::INode` or consumed by SPDP (phase 4, next).
 4. **SPDP** — Simple Participant Discovery Protocol (§8.5.3/§9.6.1): periodic (2s)
    multicast self-announcement plus a known-participants table. Reference: `spdp.go`
    (379 LOC).

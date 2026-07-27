@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(cppdds
-    VERSION 0.4.0
+    VERSION 0.5.0
     DESCRIPTION "C++ DDS library — RELAY-conformant"
     HOMEPAGE_URL "https://github.com/SoundMatt/cpp-DDS"
     LANGUAGES CXX
@@ -43,7 +43,18 @@ add_library(cppdds_lib STATIC
     src/mock/participant.cpp
     src/rtps/types.cpp
     src/rtps/cdr.cpp
+    src/rtps/transport.cpp
 )
+
+# Platform-specific socket tuning (SO_PRIORITY / IP_TOS / SO_TXTIME /
+# CLOCK_TAI): mirrors go-DDS's rtps/traffic_linux.go vs. rtps/traffic_other.go
+# `//go:build` split as a translation-unit split rather than an in-file
+# #ifdef (see ROADMAP.md, Tier 1 phase 3, and include/dds/rtps/traffic.hpp).
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_sources(cppdds_lib PRIVATE src/rtps/traffic_linux.cpp)
+else()
+    target_sources(cppdds_lib PRIVATE src/rtps/traffic_other.cpp)
+endif()
 
 target_include_directories(cppdds_lib
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -52,6 +63,10 @@ target_include_directories(cppdds_lib
 
 find_package(Threads REQUIRED)
 target_link_libraries(cppdds_lib PUBLIC Threads::Threads)
+
+if(WIN32)
+    target_link_libraries(cppdds_lib PUBLIC ws2_32)
+endif()
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 

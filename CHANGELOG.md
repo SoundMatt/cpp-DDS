@@ -6,6 +6,42 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.5.0] — 2026-07-27
+
+### Added
+
+- RTPS Tier-1 sub-phase 3 (see `ROADMAP.md`, "Tier 1 — RTPS wire protocol",
+  phase 3 "UDP transport"): `dds::rtps::UdpSocket` under
+  `include/dds/rtps/transport.hpp` + `src/rtps/transport.cpp` — an IPv4 UDP
+  socket wrapper with unicast bind (go-DDS's port+0..+15 retry, or an
+  OS-assigned ephemeral port when `port == 0`), multicast receive with a
+  same-host unicast fallback when the OS/CI sandbox has no
+  multicast-capable route, and synchronous send/recv with a 250ms poll
+  timeout matching go-DDS's `readLoop` interval. Also the RTPS 2.3 §9.6.1
+  port-assignment formula (`meta_multicast_port`, `meta_unicast_port`,
+  `data_unicast_port`, `user_multicast_port`) and the standard discovery
+  multicast group `239.255.0.1`.
+- Platform-specific socket tuning under `include/dds/rtps/traffic.hpp`,
+  mirroring go-DDS's `rtps/traffic_linux.go` / `rtps/traffic_other.go`
+  split as a CMake-selected translation-unit split: `src/rtps/traffic_linux.cpp`
+  implements real `SO_PRIORITY` / `IP_TOS` / `SO_TXTIME` / `CLOCK_TAI`
+  socket tuning via raw syscalls (only compiled when
+  `CMAKE_SYSTEM_NAME` is `Linux`); `src/rtps/traffic_other.cpp` provides
+  no-op fallbacks everywhere else (macOS, Windows).
+- Cross-platform socket implementation: BSD sockets on POSIX, Winsock2 on
+  Windows (`ws2_32` now linked into `cppdds_lib` on `WIN32`).
+- Port formula verified against go-DDS's own `rtps/wire_test.go`
+  `TestPortFormula` values, plus additional vectors reproduced by calling
+  go-DDS's actual `metaMulticastPort`/`metaUnicastPort`/`userUnicastPort`
+  functions directly (`tests/test_rtps_transport.cpp` documents the exact
+  reproduction steps). `tests/test_rtps_traffic.cpp` covers the traffic
+  tuning hooks. Verified locally with Release C++17/C++20 builds and a
+  Debug ASan+UBSan pass on Linux/gcc-12 exercising the real
+  `traffic_linux.cpp` syscall path, and a Release build on macOS/AppleClang.
+  Internal, additive scaffolding within `cppdds_lib` — not yet wired into
+  the public `dds::IParticipant` / `relay::INode` surface, and not yet
+  consumed by SPDP/SEDP (later Tier-1 sub-phases).
+
 ## [0.4.0] — 2026-07-27
 
 ### Added
