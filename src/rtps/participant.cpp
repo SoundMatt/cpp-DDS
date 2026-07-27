@@ -42,22 +42,29 @@ Guid pack_guid(const GUID& g) {
     return out;
 }
 
-// Packs a 64-bit sequence-number counter into the wire High:Low
-// SequenceNumber shape (RTPS 2.3 §9.3.2), matching go-DDS's u64ToSN
-// (rtps/reliable.go) — duplicated here as a small, self-contained helper
-// rather than depending on phase 7 (reliable delivery), which does not
-// exist yet.
-SequenceNumber u64_to_sn(uint64_t v) {
-    return SequenceNumber{static_cast<int32_t>(v >> 32), static_cast<uint32_t>(v)};
-}
-
-// Unpacks a wire SequenceNumber back into a 64-bit value, matching go-DDS's
-// snToU64.
-uint64_t sn_to_u64(const SequenceNumber& sn) {
-    return (static_cast<uint64_t>(static_cast<uint32_t>(sn.high)) << 32) | static_cast<uint64_t>(sn.low);
-}
+// sn_to_u64/u64_to_sn now live in reliable.hpp (phase 7) — see that header's
+// file-level scope note; this phase-6 comment's original rationale for a
+// local duplicate ("phase 7 ... does not exist yet") no longer applies.
 
 constexpr auto kShutdownPollSlice = std::chrono::milliseconds(50);
+
+// FNV-1a hash for GUID, used to key the per-remote-writer RecvTracker map
+// on the reader side (Tier-1 phase 7). Matches the FNV-1a construction
+// Participant::EntityIdHash/GuidPrefixHash already use for the same reason.
+struct GuidHash {
+    std::size_t operator()(const GUID& g) const noexcept {
+        std::size_t h = 1469598103934665603ull; // FNV-1a
+        for (uint8_t b : g.prefix.bytes) {
+            h ^= b;
+            h *= 1099511628211ull;
+        }
+        for (uint8_t b : g.entity.bytes) {
+            h ^= b;
+            h *= 1099511628211ull;
+        }
+        return h;
+    }
+};
 
 } // namespace
 
@@ -88,13 +95,14 @@ std::size_t Participant::GuidPrefixHash::operator()(const GuidPrefix& g) const n
 class Reader : public ISubscriber, public std::enable_shared_from_this<Reader> {
 public:
     Reader(std::shared_ptr<Participant> p, std::string topic, EntityId eid, int depth,
-           relay::BackPressurePolicy back_pressure, std::function<bool(const Sample&)> filter)
+           relay::BackPressurePolicy back_pressure, std::function<bool(const Sample&)> filter, bool reliable)
         : p_(std::move(p))
         , topic_(std::move(topic))
         , eid_(eid)
         , ch_(std::make_shared<dds::Chan<Sample>>(static_cast<std::size_t>(depth)))
         , back_pressure_(back_pressure)
         , filter_(std::move(filter))
+        , reliable_(reliable)
     {}
 
     ~Reader() override { unsubscribe(); }
@@ -120,6 +128,18 @@ public:
 
     const std::string& topic() const noexcept { return topic_; }
     const EntityId&     entity_id() const noexcept { return eid_; }
+    bool                reliable() const noexcept { return reliable_; }
+
+    // Returns (creating if necessary) the RecvTracker for writer_guid.
+    // Matches go-DDS's rtpsReader.trackerFor.
+    std::shared_ptr<RecvTracker> tracker_for(const GUID& writer_guid) {
+        std::lock_guard<std::mutex> lock(trackers_mu_);
+        auto it = trackers_.find(writer_guid);
+        if (it != trackers_.end()) return it->second;
+        auto t = std::make_shared<RecvTracker>();
+        trackers_.emplace(writer_guid, t);
+        return t;
+    }
 
     // Applies the sample filter (if any) and enqueues per back_pressure_.
     void deliver(const Sample& s) {
@@ -151,6 +171,10 @@ private:
     relay::BackPressurePolicy             back_pressure_;
     std::function<bool(const Sample&)>   filter_;
     std::atomic<bool>                     unsubscribed_{false};
+    bool                                   reliable_{false};
+
+    std::mutex                                              trackers_mu_;
+    std::unordered_map<GUID, std::shared_ptr<RecvTracker>, GuidHash> trackers_;
 };
 
 // ── Writer ───────────────────────────────────────────────────────────────────
@@ -163,8 +187,31 @@ private:
 // security, fragmentation).
 class Writer : public IPublisher {
 public:
-    Writer(std::shared_ptr<Participant> p, std::string topic, EntityId eid, QoS qos, std::size_t history_depth)
-        : p_(std::move(p)), topic_(std::move(topic)), eid_(eid), qos_(qos), history_(history_depth) {}
+    Writer(std::shared_ptr<Participant> p, std::string topic, EntityId eid, QoS qos, std::size_t history_depth,
+           std::chrono::milliseconds hb_period)
+        : p_(std::move(p))
+        , topic_(std::move(topic))
+        , eid_(eid)
+        , qos_(qos)
+        , history_(history_depth)
+        , reliable_(qos.reliability == ReliabilityKind::Reliable)
+        , hb_period_(hb_period)
+    {
+        // A reliable writer runs its own periodic-HEARTBEAT thread for as
+        // long as the writer is open, matching go-DDS's per-writer
+        // `heartbeatLoop` goroutine (rtps/participant.go). Capturing `this`
+        // (not shared_from_this) is safe: the thread is always stopped and
+        // joined in close()/~Writer() before the object can be destroyed.
+        if (reliable_) {
+            hb_running_.store(true);
+            hb_thread_ = std::thread(&Writer::heartbeat_loop, this);
+        }
+    }
+
+    ~Writer() override { close(); }
+
+    Writer(const Writer&)            = delete;
+    Writer& operator=(const Writer&) = delete;
 
     std::error_code write(const std::vector<uint8_t>& payload) override {
         return write(relay::Context::background(), payload);
@@ -195,8 +242,10 @@ public:
         ds.encode(submsg);
         auto msg = wrap_in_rtps_message(p_->guid_prefix(), kVendorIdCppDDS, submsg);
 
-        // HistoryCache: scaffolding for phase 7 (reliable delivery), not
-        // yet consumed — see history_cache.hpp's own scope note.
+        // HistoryCache: this writer's sequence-number-indexed retained
+        // window. Populated for every writer regardless of QoS (matching
+        // go-DDS's unconditional history store); consumed for reliable
+        // retransmission by handle_ack_nack below (Tier-1 phase 7).
         CacheChange change;
         change.sequence_number = seq;
         change.writer_guid      = source;
@@ -216,6 +265,12 @@ public:
             p_->update_last_sample(topic_, s);
         }
 
+        // Disk-backed durability persistence: flushed on every write
+        // regardless of this writer's own QoS (matches go-DDS's
+        // unconditional persistFlush call in Write()); a no-op when
+        // ParticipantOptions::persist_dir is empty.
+        persist_flush(p_->persist_dir(), topic_, payload);
+
         // Local (same-process, same-participant) delivery: unconditional,
         // topic-name-matched only — matches go-DDS's
         // dispatchToReaders acceptsSource short-circuit for
@@ -232,15 +287,126 @@ public:
             }
         }
 
+        // Send HEARTBEAT immediately after each reliable write so remote
+        // readers can detect gaps without waiting for the periodic
+        // heartbeat thread, matching go-DDS's Write().
+        if (reliable_) send_heartbeat();
+
         return {};
     }
 
     std::error_code close() override {
-        closed_.store(true);
+        if (closed_.exchange(true)) return {};
+        if (hb_running_.exchange(false)) {
+            if (hb_thread_.joinable()) hb_thread_.join();
+        }
+        p_->unregister_writer(eid_);
         return {};
     }
 
+    // ── reliable delivery (Tier-1 phase 7) ──────────────────────────────
+
+    bool reliable() const noexcept { return reliable_; }
+
+    // Builds and sends a HEARTBEAT to every SEDP-matched reader locator for
+    // this topic, advertising the HistoryCache's retained [first, last]
+    // span. No-op while the history is empty (nothing to advertise yet).
+    // Matches go-DDS's sendHeartbeatLocked.
+    void send_heartbeat() {
+        if (history_.empty()) return;
+        const auto [first, last] = history_.span();
+
+        Heartbeat hb;
+        hb.reader_entity_id = kEntityIdUnknown;
+        hb.writer_entity_id = eid_;
+        hb.first_sn           = u64_to_sn(first);
+        hb.last_sn             = u64_to_sn(last);
+        hb.count                = hb_count_.fetch_add(1) + 1;
+
+        std::vector<uint8_t> submsg;
+        hb.encode(submsg);
+        auto msg = wrap_in_rtps_message(p_->guid_prefix(), kVendorIdCppDDS, submsg);
+
+        for (const auto& loc : p_->sedp().matched_reader_locators_for_topic(topic_)) {
+            std::string addr;
+            int          port = 0;
+            if (locator_to_dest(loc, addr, port)) p_->send_data(addr, port, msg);
+        }
+    }
+
+    // Retransmits every requested-and-still-retained sequence number from
+    // history to every SEDP-matched reader locator for this topic (not just
+    // the ACKNACK sender), and sends a GAP (to the sender and every matched
+    // locator) for the leading portion of the requested range already
+    // evicted from history. Matches go-DDS's handleAckNack.
+    void handle_ack_nack(const AckNack& an, const std::string& from_address, int from_port) {
+        if (!reliable_) return;
+        const uint64_t ack_base = sn_to_u64(an.base);
+
+        for (uint64_t bit = 0; bit < 32; ++bit) {
+            if ((an.bitmap & (1u << static_cast<unsigned>(bit))) == 0) continue;
+            const uint64_t seq = ack_base + bit;
+            auto            change = history_.get(seq);
+            if (!change) continue;
+
+            DataSubmessage ds;
+            ds.reader_entity_id = kEntityIdUnknown;
+            ds.writer_entity_id = eid_;
+            ds.seq_num            = u64_to_sn(seq);
+            ds.payload             = cdr_wrap_payload(change->payload);
+            std::vector<uint8_t> submsg;
+            ds.encode(submsg);
+            auto msg = wrap_in_rtps_message(p_->guid_prefix(), kVendorIdCppDDS, submsg);
+
+            for (const auto& loc : p_->sedp().matched_reader_locators_for_topic(topic_)) {
+                std::string addr;
+                int          port = 0;
+                if (locator_to_dest(loc, addr, port)) p_->send_data(addr, port, msg);
+            }
+        }
+
+        if (history_.empty()) return;
+        const auto [hist_first, hist_last] = history_.span();
+        (void)hist_last;
+        if (ack_base >= hist_first) return;
+
+        uint64_t gap_end = hist_first - 1;
+        if (const uint64_t max_bit = ack_base + 31; gap_end > max_bit) gap_end = max_bit;
+
+        Gap g;
+        g.reader_entity_id = an.reader_entity_id;
+        g.writer_entity_id = eid_;
+        g.gap_start           = u64_to_sn(ack_base);
+        g.gap_end              = u64_to_sn(gap_end);
+        std::vector<uint8_t> gap_submsg;
+        g.encode(gap_submsg);
+        auto gap_msg = wrap_in_rtps_message(p_->guid_prefix(), kVendorIdCppDDS, gap_submsg);
+
+        if (from_port != 0) p_->send_data(from_address, from_port, gap_msg);
+        for (const auto& loc : p_->sedp().matched_reader_locators_for_topic(topic_)) {
+            std::string addr;
+            int          port = 0;
+            if (locator_to_dest(loc, addr, port)) p_->send_data(addr, port, gap_msg);
+        }
+    }
+
 private:
+    // Background loop for a reliable writer's periodic HEARTBEAT, matching
+    // go-DDS's heartbeatLoop. Shutdown-responsive in kShutdownPollSlice
+    // increments, mirroring Participant::bridge_loop's identical pattern.
+    void heartbeat_loop() {
+        while (hb_running_.load(std::memory_order_relaxed)) {
+            std::chrono::milliseconds elapsed{0};
+            while (hb_running_.load(std::memory_order_relaxed) && elapsed < hb_period_) {
+                auto slice = std::min(kShutdownPollSlice, hb_period_ - elapsed);
+                std::this_thread::sleep_for(slice);
+                elapsed += slice;
+            }
+            if (!hb_running_.load(std::memory_order_relaxed)) return;
+            if (!closed_.load(std::memory_order_relaxed)) send_heartbeat();
+        }
+    }
+
     std::shared_ptr<Participant> p_;
     std::string                    topic_;
     EntityId                        eid_;
@@ -248,6 +414,13 @@ private:
     std::atomic<uint64_t>           seq_{0};
     std::atomic<bool>               closed_{false};
     HistoryCache                    history_;
+
+    // ── reliable delivery (Tier-1 phase 7) ──────────────────────────────
+    bool                             reliable_{false};
+    std::chrono::milliseconds       hb_period_{kHeartbeatPeriod};
+    std::atomic<int32_t>            hb_count_{0};
+    std::atomic<bool>               hb_running_{false};
+    std::thread                      hb_thread_;
 };
 
 // ── Participant ────────────────────────────────────────────────────────────
@@ -316,6 +489,8 @@ Participant::create(Domain domain, ParticipantOptions opts) {
     p->history_depth_       = opts.history_depth > 0 ? opts.history_depth : kDefaultHistoryDepth;
     p->bridge_poll_period_  = opts.bridge_poll_period.count() > 0 ? opts.bridge_poll_period
                                                                     : std::chrono::milliseconds(200);
+    p->heartbeat_period_    = opts.heartbeat_period.count() > 0 ? opts.heartbeat_period : kHeartbeatPeriod;
+    p->persist_dir_          = opts.persist_dir;
     p->data_sock_           = std::move(data_sock);
 
     SpdpConfig spdp_cfg;
@@ -354,8 +529,9 @@ Participant::new_publisher(const std::string& topic, QoS qos) {
     const uint32_t n   = next_entity_ordinal();
     const EntityId eid = entity_id_for_writer(n);
 
-    auto w = std::make_shared<Writer>(shared_from_this(), topic, eid, qos, history_depth_);
+    auto w = std::make_shared<Writer>(shared_from_this(), topic, eid, qos, history_depth_, heartbeat_period_);
     sedp_->register_writer(eid, topic);
+    register_writer(eid, w);
     return {w, {}};
 }
 
@@ -375,16 +551,28 @@ Participant::new_subscriber(const std::string& topic, QoS qos, std::vector<relay
         sample_filter = [f = cfg.filter](const Sample& s) { return f(s.to_message()); };
     }
 
+    const bool reliable = qos.reliability == ReliabilityKind::Reliable;
     auto reader = std::make_shared<Reader>(shared_from_this(), topic, eid, depth, cfg.back_pressure,
-                                            std::move(sample_filter));
+                                            std::move(sample_filter), reliable);
     register_reader(eid, reader);
     sedp_->register_reader(eid, topic);
 
     // TransientLocal: deliver the last published sample to the new
-    // subscriber, if one exists.
+    // subscriber, if one exists. Falls back to the on-disk persisted
+    // sample (ParticipantOptions::persist_dir) when no in-memory
+    // last_sample exists yet (e.g. right after a process restart), matching
+    // go-DDS's NewSubscriber fallback order exactly.
     if (qos.durability == DurabilityKind::TransientLocal) {
         if (auto last = last_sample(topic)) {
             reader->deliver(*last);
+        } else if (!persist_dir_.empty()) {
+            if (auto payload = persist_load(persist_dir_, topic)) {
+                Sample s;
+                s.topic   = topic;
+                s.payload = *payload;
+                update_last_sample(topic, s);
+                reader->deliver(s);
+            }
         }
     }
 
@@ -393,6 +581,21 @@ Participant::new_subscriber(const std::string& topic, QoS qos, std::vector<relay
 
 std::error_code Participant::close() {
     if (closed_.exchange(true)) return {};
+
+    // Snapshot and close every still-registered writer first (stops each
+    // reliable writer's heartbeat thread), matching go-DDS's
+    // participant.Close() snapshotting and closing every rtpsWriter before
+    // tearing down sockets.
+    std::vector<std::shared_ptr<Writer>> writers;
+    {
+        std::lock_guard<std::mutex> lock(writers_mu_);
+        writers.reserve(writers_.size());
+        for (auto& [eid, weak] : writers_) {
+            (void)eid;
+            if (auto w = weak.lock()) writers.push_back(std::move(w));
+        }
+    }
+    for (auto& w : writers) w->close();
 
     stop_bridge_loop();
     stop_data_loop();
@@ -464,6 +667,16 @@ void Participant::unregister_reader(const EntityId& eid) {
     readers_.erase(eid);
 }
 
+void Participant::register_writer(const EntityId& eid, const std::shared_ptr<Writer>& w) {
+    std::lock_guard<std::mutex> lock(writers_mu_);
+    writers_[eid] = w;
+}
+
+void Participant::unregister_writer(const EntityId& eid) {
+    std::lock_guard<std::mutex> lock(writers_mu_);
+    writers_.erase(eid);
+}
+
 void Participant::update_last_sample(const std::string& topic, const Sample& s) {
     std::lock_guard<std::mutex> lock(last_mu_);
     last_samples_[topic] = s;
@@ -497,12 +710,12 @@ void Participant::data_loop() {
         auto pkt = data_sock_.recv();
         if (!data_running_.load(std::memory_order_relaxed)) return;
         if (!pkt) continue;
-        handle_data_packet(pkt->data, pkt->from_address);
+        handle_data_packet(pkt->data, pkt->from_address, pkt->from_port);
     }
 }
 
-void Participant::handle_data_packet(const std::vector<uint8_t>& data, const std::string& from_address) {
-    (void)from_address;
+void Participant::handle_data_packet(const std::vector<uint8_t>& data, const std::string& from_address,
+                                       int from_port) {
     auto hdr = Header::decode(data.data(), data.size());
     if (!hdr) return;
     if (hdr->guid_prefix == guid_prefix_) return; // ignore our own (shouldn't normally arrive unicast)
@@ -524,12 +737,123 @@ void Participant::handle_data_packet(const std::vector<uint8_t>& data, const std
                 if (raw) {
                     const GUID source{hdr->guid_prefix, ds->writer_entity_id};
                     const auto now = std::chrono::system_clock::now();
+                    // Reliable-delivery bookkeeping (record + ACKNACK-on-gap)
+                    // happens before dispatch, matching go-DDS's ordering of
+                    // notifyReliableReaders then dispatchToReaders.
+                    notify_reliable_readers(source, ds->seq_num, from_address, from_port);
                     dispatch(source, "", *raw, now, sn_to_u64(ds->seq_num));
                 }
             }
+        } else if (sh->submessage_id == kSubmessageIdHeartbeat) {
+            auto hb = Heartbeat::decode(body + pos, entry_len);
+            if (hb) {
+                const GUID writer_guid{hdr->guid_prefix, hb->writer_entity_id};
+                handle_heartbeat(writer_guid, *hb, from_address, from_port);
+            }
+        } else if (sh->submessage_id == kSubmessageIdAckNack) {
+            auto an = AckNack::decode(body + pos, entry_len);
+            if (an) handle_ack_nack(*an, from_address, from_port);
         }
         pos += entry_len;
     }
+}
+
+// ── reliable delivery (Tier-1 phase 7) ───────────────────────────────────────
+
+void Participant::notify_reliable_readers(const GUID& writer_guid, const SequenceNumber& seq_num,
+                                            const std::string& from_address, int from_port) {
+    std::vector<std::shared_ptr<Reader>> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(readers_mu_);
+        snapshot.reserve(readers_.size());
+        for (auto& [eid, weak] : readers_) {
+            (void)eid;
+            if (auto r = weak.lock()) snapshot.push_back(std::move(r));
+        }
+    }
+
+    for (auto& r : snapshot) {
+        if (!r->reliable()) continue;
+        bool accepted = (writer_guid.prefix == guid_prefix_);
+        if (!accepted) {
+            auto matched = sedp_->matched_writer_guids_for_reader(r->entity_id());
+            accepted       = std::find(matched.begin(), matched.end(), writer_guid) != matched.end();
+        }
+        if (!accepted) continue;
+
+        auto tracker = r->tracker_for(writer_guid);
+        const uint64_t sn = sn_to_u64(seq_num);
+        tracker->record(sn);
+        // The writer's history reaches at least this SN, so NACK any gap below it.
+        auto [base, bitmap, need_ack] = tracker->missing(sn);
+        if (!need_ack || from_port == 0) continue;
+
+        AckNack an;
+        an.reader_entity_id = r->entity_id();
+        an.writer_entity_id = writer_guid.entity;
+        an.base                = u64_to_sn(base);
+        an.bitmap               = bitmap;
+        an.count                = tracker->next_ack_count();
+        std::vector<uint8_t> submsg;
+        an.encode(submsg);
+        auto msg = wrap_in_rtps_message(guid_prefix_, kVendorIdCppDDS, submsg);
+        send_data(from_address, from_port, msg);
+    }
+}
+
+void Participant::handle_heartbeat(const GUID& writer_guid, const Heartbeat& hb, const std::string& from_address,
+                                     int from_port) {
+    std::vector<std::shared_ptr<Reader>> snapshot;
+    {
+        std::lock_guard<std::mutex> lock(readers_mu_);
+        snapshot.reserve(readers_.size());
+        for (auto& [eid, weak] : readers_) {
+            (void)eid;
+            if (auto r = weak.lock()) snapshot.push_back(std::move(r));
+        }
+    }
+
+    for (auto& r : snapshot) {
+        if (!r->reliable()) continue;
+        bool accepted = (writer_guid.prefix == guid_prefix_);
+        if (!accepted) {
+            auto matched = sedp_->matched_writer_guids_for_reader(r->entity_id());
+            accepted       = std::find(matched.begin(), matched.end(), writer_guid) != matched.end();
+        }
+        if (!accepted) continue;
+
+        auto tracker = r->tracker_for(writer_guid);
+        // On first contact, anchor the cumulative-ACK base at the writer's
+        // FirstSN so the reader can request the writer's whole live history.
+        tracker->init_expected(sn_to_u64(hb.first_sn));
+        // Re-NACK every SN still missing up to the writer's LastSN. Because
+        // the watermark never skips a gap, a lost retransmit is requested
+        // again on each periodic HEARTBEAT until it arrives.
+        auto [base, bitmap, need_ack] = tracker->missing(sn_to_u64(hb.last_sn));
+        if (!need_ack || from_port == 0) continue;
+
+        AckNack an;
+        an.reader_entity_id = r->entity_id();
+        an.writer_entity_id = writer_guid.entity;
+        an.base                = u64_to_sn(base);
+        an.bitmap               = bitmap;
+        an.count                = tracker->next_ack_count();
+        std::vector<uint8_t> submsg;
+        an.encode(submsg);
+        auto msg = wrap_in_rtps_message(guid_prefix_, kVendorIdCppDDS, submsg);
+        send_data(from_address, from_port, msg);
+    }
+}
+
+void Participant::handle_ack_nack(const AckNack& an, const std::string& from_address, int from_port) {
+    std::shared_ptr<Writer> w;
+    {
+        std::lock_guard<std::mutex> lock(writers_mu_);
+        auto it = writers_.find(an.writer_entity_id);
+        if (it != writers_.end()) w = it->second.lock();
+    }
+    if (!w) return;
+    w->handle_ack_nack(an, from_address, from_port);
 }
 
 // ── SPDP -> SEDP peer-bridge loop ────────────────────────────────────────────

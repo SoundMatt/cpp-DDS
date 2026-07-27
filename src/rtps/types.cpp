@@ -201,6 +201,118 @@ std::optional<DataSubmessage> DataSubmessage::decode(const uint8_t* data, std::s
     return ds;
 }
 
+// ── HEARTBEAT submessage ──────────────────────────────────────────────────────
+
+void Heartbeat::encode(std::vector<uint8_t>& out) const {
+    std::vector<uint8_t> body;
+    body.reserve(28);
+    body.insert(body.end(), reader_entity_id.bytes.begin(), reader_entity_id.bytes.end());
+    body.insert(body.end(), writer_entity_id.bytes.begin(), writer_entity_id.bytes.end());
+    put_i32_le(body, first_sn.high);
+    put_u32_le(body, first_sn.low);
+    put_i32_le(body, last_sn.high);
+    put_u32_le(body, last_sn.low);
+    put_i32_le(body, count);
+
+    SubmessageHeader hdr;
+    hdr.submessage_id         = kSubmessageIdHeartbeat;
+    hdr.flags                 = kFlagEndianness;
+    hdr.octets_to_next_header = static_cast<uint16_t>(body.size());
+
+    out.reserve(out.size() + SubmessageHeader::kSize + body.size());
+    hdr.encode(out);
+    out.insert(out.end(), body.begin(), body.end());
+}
+
+std::optional<Heartbeat> Heartbeat::decode(const uint8_t* data, std::size_t len) {
+    auto hdr = SubmessageHeader::decode(data, len);
+    if (!hdr || hdr->submessage_id != kSubmessageIdHeartbeat) return std::nullopt;
+
+    const std::size_t body_len = hdr->octets_to_next_header;
+    if (SubmessageHeader::kSize + body_len > len) return std::nullopt;
+    if (body_len < 28) return std::nullopt;
+
+    const uint8_t* body = data + SubmessageHeader::kSize;
+
+    Heartbeat hb;
+    std::memcpy(hb.reader_entity_id.bytes.data(), body + 0, EntityId::kSize);
+    std::memcpy(hb.writer_entity_id.bytes.data(), body + 4, EntityId::kSize);
+    hb.first_sn.high = get_i32_le(body + 8);
+    hb.first_sn.low  = get_u32_le(body + 12);
+    hb.last_sn.high  = get_i32_le(body + 16);
+    hb.last_sn.low   = get_u32_le(body + 20);
+    hb.count         = get_i32_le(body + 24);
+    return hb;
+}
+
+// ── ACKNACK submessage ────────────────────────────────────────────────────────
+
+void AckNack::encode(std::vector<uint8_t>& out) const {
+    std::vector<uint8_t> body;
+    body.reserve(28);
+    body.insert(body.end(), reader_entity_id.bytes.begin(), reader_entity_id.bytes.end());
+    body.insert(body.end(), writer_entity_id.bytes.begin(), writer_entity_id.bytes.end());
+    put_i32_le(body, base.high);
+    put_u32_le(body, base.low);
+    put_u32_le(body, 32); // numBits — always one full bitmap word
+    put_u32_le(body, bitmap);
+    put_i32_le(body, count);
+
+    SubmessageHeader hdr;
+    hdr.submessage_id         = kSubmessageIdAckNack;
+    hdr.flags                 = kFlagEndianness;
+    hdr.octets_to_next_header = static_cast<uint16_t>(body.size());
+
+    out.reserve(out.size() + SubmessageHeader::kSize + body.size());
+    hdr.encode(out);
+    out.insert(out.end(), body.begin(), body.end());
+}
+
+std::optional<AckNack> AckNack::decode(const uint8_t* data, std::size_t len) {
+    auto hdr = SubmessageHeader::decode(data, len);
+    if (!hdr || hdr->submessage_id != kSubmessageIdAckNack) return std::nullopt;
+
+    const std::size_t body_len = hdr->octets_to_next_header;
+    if (SubmessageHeader::kSize + body_len > len) return std::nullopt;
+    if (body_len < 28) return std::nullopt;
+
+    const uint8_t* body = data + SubmessageHeader::kSize;
+
+    AckNack an;
+    std::memcpy(an.reader_entity_id.bytes.data(), body + 0, EntityId::kSize);
+    std::memcpy(an.writer_entity_id.bytes.data(), body + 4, EntityId::kSize);
+    an.base.high = get_i32_le(body + 8);
+    an.base.low  = get_u32_le(body + 12);
+    // body[16:20] = numBits — read but not validated, matching go-DDS.
+    an.bitmap = get_u32_le(body + 20);
+    an.count  = get_i32_le(body + 24);
+    return an;
+}
+
+// ── GAP submessage ─────────────────────────────────────────────────────────────
+
+void Gap::encode(std::vector<uint8_t>& out) const {
+    std::vector<uint8_t> body;
+    body.reserve(28);
+    body.insert(body.end(), reader_entity_id.bytes.begin(), reader_entity_id.bytes.end());
+    body.insert(body.end(), writer_entity_id.bytes.begin(), writer_entity_id.bytes.end());
+    put_i32_le(body, gap_start.high);
+    put_u32_le(body, gap_start.low);
+    // gapList.bitmapBase = first SN *after* the gap = gap_end.low + 1.
+    put_i32_le(body, gap_end.high);
+    put_u32_le(body, gap_end.low + 1);
+    put_u32_le(body, 0); // gapList.numBits — no extra bitmap words
+
+    SubmessageHeader hdr;
+    hdr.submessage_id         = kSubmessageIdGap;
+    hdr.flags                 = kFlagEndianness;
+    hdr.octets_to_next_header = static_cast<uint16_t>(body.size());
+
+    out.reserve(out.size() + SubmessageHeader::kSize + body.size());
+    hdr.encode(out);
+    out.insert(out.end(), body.begin(), body.end());
+}
+
 // ── Participant/entity identity allocation ──────────────────────────────────
 
 GuidPrefix new_guid_prefix() {

@@ -5,38 +5,43 @@
 
 // rtps/participant.hpp — participant/writer/reader entity lifecycle: the
 // point where phases 1-5 (wire types, discovery CDR, UDP transport, SPDP,
-// SEDP) are wired together into a working best-effort dds::IParticipant
-// over real RTPS/UDP.
+// SEDP) are wired together into a working dds::IParticipant over real
+// RTPS/UDP, plus (as of Tier-1 phase 7) reliable HEARTBEAT/ACKNACK
+// retransmission and TransientLocal disk persistence.
 //
-// This is Tier-1 sub-phase 6 of the cpp-DDS RTPS roadmap (see ROADMAP.md,
-// "Tier 1 — RTPS wire protocol", phase 6: "Entities & history cache"). It is
-// internal, additive scaffolding: `dds::rtps::Participant` is a *new*,
-// separate implementation of dds::IParticipant living alongside
-// `dds::mock`'s — it is NOT wired into `dds::adapt()`'s default selection
-// or any automatic-transport-selection surface (that is the still-unchecked
-// `dds/auto/` roadmap item). Callers who want RTPS today construct
-// `dds::rtps::Participant::create(...)` explicitly, exactly as they would
-// construct `dds::mock::create(...)` explicitly.
+// This is Tier-1 sub-phases 6 ("Entities & history cache") and 7 ("Reliable
+// delivery") of the cpp-DDS RTPS roadmap (see ROADMAP.md, "Tier 1 — RTPS
+// wire protocol"). It is internal, additive scaffolding: `dds::rtps::
+// Participant` is a *new*, separate implementation of dds::IParticipant
+// living alongside `dds::mock`'s — it is NOT wired into `dds::adapt()`'s
+// default selection or any automatic-transport-selection surface (that is
+// the still-unchecked `dds/auto/` roadmap item). Callers who want RTPS
+// today construct `dds::rtps::Participant::create(...)` explicitly, exactly
+// as they would construct `dds::mock::create(...)` explicitly.
 //
-// Scope: **best-effort delivery only** (RELAY spec QoS::reliability ==
-// BestEffort is the only path this phase implements end-to-end; passing
-// Reliable QoS is accepted — no error — but a Reliable publisher/subscriber
-// behaves identically to a BestEffort one until Tier-1 phase 7 ("Reliable
-// delivery — HEARTBEAT/ACKNACK") lands and consumes the HistoryCache this
-// phase introduces). No fragmentation (phase 8), no loan integration
-// (phase 9), no IPv6 (phase 10), no security/TSN (Tier 2/3), no
-// INFO_TS-carried publish timestamps (Sample::timestamp is always the local
-// wall-clock time of publish/receipt — every wire primitive this phase
-// composes — DataSubmessage, cdr_wrap_payload, wrap_in_rtps_message — was
-// already byte-verified against go-DDS in phases 1-2/4-5; this phase
-// introduces no *new* wire encoding of its own).
+// Scope: RELAY spec QoS::reliability == Reliable now gets real
+// HEARTBEAT-after-write-and-periodic / ACKNACK-on-gap / retransmit-from-
+// history delivery (RTPS 2.3 §8.4.9-§8.4.12) — see reliable.hpp and
+// persist.hpp for that phase's own scope notes. Still out of scope: no
+// fragmentation (phase 8), no loan integration (phase 9), no IPv6
+// (phase 10), no security/TSN (Tier 2/3), no INFO_TS-carried publish
+// timestamps (Sample::timestamp is always the local wall-clock time of
+// publish/receipt — every wire primitive this phase composes — DataSubmessage,
+// cdr_wrap_payload, wrap_in_rtps_message, Heartbeat/AckNack/Gap::encode —
+// was already byte-verified against go-DDS in phases 1-2/4-5 and this
+// phase's own types.hpp additions; this phase introduces no wire encoding
+// that isn't pinned by a golden vector somewhere).
 //
-// C++ port of the entity-lifecycle and best-effort-dispatch portions of
-// github.com/SoundMatt/go-DDS's rtps/participant.go (`participant`,
-// `rtpsWriter`, `rtpsReader` and their methods) — the reliable-delivery
-// (HEARTBEAT/ACKNACK), TSN-socket, security-plugin, anti-replay,
-// persistence, and IPv6 portions of that file are explicitly out of scope
-// here; see the roadmap phase list for where each lands.
+// C++ port of the entity-lifecycle, best-effort-dispatch, and
+// reliable-delivery portions of github.com/SoundMatt/go-DDS's
+// rtps/participant.go (`participant`, `rtpsWriter`, `rtpsReader` and their
+// methods) plus rtps/reliable.go and rtps/persist.go — the TSN-socket,
+// security-plugin, anti-replay, and IPv6 portions of participant.go remain
+// explicitly out of scope here; see the roadmap phase list for where each
+// lands. Also out of scope: go-DDS's `waitDrain`/`CloseWithDrain`
+// (blocking until all writes are ACKed) — not required by this phase's
+// roadmap text and not exposed anywhere yet; can be added if a later phase
+// needs it.
 //
 // Scope notes (deliberate deviations from a literal line-for-line port):
 //
@@ -66,9 +71,33 @@
 //     the sending writer's GUID — matching go-DDS's fallback branch of the
 //     same acceptsSource check.
 //   - HistoryCache (rtps/history_cache.hpp) is populated by every writer
-//     write but not yet consumed by anything (no retransmission exists
-//     yet) — see history_cache.hpp's own scope note on why it is not a
-//     byte-for-byte port of go-DDS's reliable-only `sendHistory`.
+//     write and, as of this phase, consumed for reliable retransmission —
+//     see reliable.hpp's file-level scope note on why there is no separate
+//     `sendHistory` port (HistoryCache already serves that role).
+//   - A reliable Writer's periodic HEARTBEAT is sent from a dedicated
+//     background thread per writer (mirroring go-DDS's per-writer
+//     `heartbeatLoop` goroutine), started when the writer is created and
+//     joined in `Writer::close()`/`~Writer()`. `Participant::close()` closes
+//     every still-registered writer (via a new `writers_` weak_ptr registry,
+//     mirroring the existing `readers_` registry) so no heartbeat thread
+//     outlives the participant, matching go-DDS's `participant.Close()`
+//     snapshotting and closing every `rtpsWriter` before tearing down its
+//     sockets.
+//   - ACKNACK retransmission is broadcast to every SEDP-matched reader
+//     locator for the writer's topic (not just the ACKNACK sender), and a
+//     GAP is additionally sent (to both the sender and every matched
+//     locator) for any requested range already evicted from history —
+//     matching go-DDS's `handleAckNack` exactly, including its asymmetry
+//     that GAP is sent but never parsed on receipt (go-DDS itself has no
+//     `parseGAP`; this port doesn't add one either — see types.hpp's `Gap`
+//     doc comment).
+//   - `ParticipantOptions::persist_dir` is this port's equivalent of
+//     go-DDS's `WithPersistentHistory` option: when non-empty, every
+//     writer's every publish is flushed to `<persist_dir>/topic-<topic>.bin`
+//     (see persist.hpp), and a `TransientLocal` subscriber falls back to
+//     that on-disk copy when no in-memory `last_sample` exists yet (e.g.
+//     right after process restart) — matching go-DDS's `NewSubscriber`
+//     fallback order exactly.
 //   - `ParticipantOptions::test_mode` exists purely for deterministic
 //     tests: it binds every socket to an OS-assigned ephemeral port and
 //     sends SPDP announcements via direct unicast to a configured
@@ -92,6 +121,8 @@
 
 #include <dds/dds.hpp>
 #include <dds/rtps/history_cache.hpp>
+#include <dds/rtps/persist.hpp>
+#include <dds/rtps/reliable.hpp>
 #include <dds/rtps/sedp.hpp>
 #include <dds/rtps/spdp.hpp>
 #include <dds/rtps/transport.hpp>
@@ -121,6 +152,16 @@ struct ParticipantOptions {
 
     // Per-writer HistoryCache capacity. 0 => kDefaultHistoryDepth.
     std::size_t history_depth{kDefaultHistoryDepth};
+
+    // How often a reliable writer's background loop re-sends a HEARTBEAT.
+    // 0 => kHeartbeatPeriod. Matches go-DDS's WithHeartbeatPeriod option /
+    // effectiveHeartbeatPeriod.
+    std::chrono::milliseconds heartbeat_period{0};
+
+    // Directory backing TransientLocal durability persistence (see
+    // persist.hpp). Empty (the default) disables persistence entirely —
+    // matches go-DDS's WithPersistentHistory(dir) option, dir == "" no-op.
+    std::string persist_dir;
 };
 
 // Participant is a working dds::IParticipant backed by real RTPS/UDP:
@@ -193,15 +234,42 @@ private:
     void register_reader(const EntityId& eid, const std::shared_ptr<Reader>& r);
     void unregister_reader(const EntityId& eid);
 
+    void register_writer(const EntityId& eid, const std::shared_ptr<Writer>& w);
+    void unregister_writer(const EntityId& eid);
+
     void update_last_sample(const std::string& topic, const Sample& s);
     std::optional<Sample> last_sample(const std::string& topic) const;
+
+    const std::string& persist_dir() const noexcept { return persist_dir_; }
+    std::chrono::milliseconds heartbeat_period() const noexcept { return heartbeat_period_; }
+
+    // ── reliable delivery (Tier-1 phase 7) ──────────────────────────────
+    // See reliable.hpp / types.hpp (Heartbeat/AckNack/Gap) and
+    // participant.hpp's file-level scope notes for what these implement.
+
+    // Updates the RecvTracker of every local reliable reader that accepts
+    // writer_guid as a source, and sends ACKNACK if a gap is detected.
+    // Matches go-DDS's notifyReliableReaders.
+    void notify_reliable_readers(const GUID& writer_guid, const SequenceNumber& seq_num,
+                                  const std::string& from_address, int from_port);
+
+    // Responds with ACKNACK for every local reliable reader with a gap
+    // against writer_guid's advertised [FirstSN, LastSN] window. Matches
+    // go-DDS's handleHeartbeat.
+    void handle_heartbeat(const GUID& writer_guid, const Heartbeat& hb, const std::string& from_address,
+                           int from_port);
+
+    // Looks up the local writer named by an.writer_entity_id and, if
+    // reliable, delegates to Writer::handle_ack_nack for retransmission.
+    // Matches go-DDS's handleAckNack.
+    void handle_ack_nack(const AckNack& an, const std::string& from_address, int from_port);
 
     // ── background loops ────────────────────────────────────────────────
 
     void start_data_loop();
     void stop_data_loop();
     void data_loop();
-    void handle_data_packet(const std::vector<uint8_t>& data, const std::string& from_address);
+    void handle_data_packet(const std::vector<uint8_t>& data, const std::string& from_address, int from_port);
 
     void start_bridge_loop();
     void stop_bridge_loop();
@@ -215,6 +283,8 @@ private:
     int        meta_unicast_port_{0};
     int        data_unicast_port_{0};
     std::size_t history_depth_{kDefaultHistoryDepth};
+    std::chrono::milliseconds heartbeat_period_{kHeartbeatPeriod};
+    std::string persist_dir_;
 
     UdpSocket data_sock_;
 
@@ -233,6 +303,9 @@ private:
 
     mutable std::mutex                                              readers_mu_;
     std::unordered_map<EntityId, std::weak_ptr<Reader>, EntityIdHash> readers_;
+
+    mutable std::mutex                                              writers_mu_;
+    std::unordered_map<EntityId, std::weak_ptr<Writer>, EntityIdHash> writers_;
 
     mutable std::mutex                       last_mu_;
     std::unordered_map<std::string, Sample>  last_samples_;
