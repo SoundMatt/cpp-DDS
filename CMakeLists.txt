@@ -42,6 +42,7 @@ add_library(cppdds_lib STATIC
     src/dds.cpp
     src/mock/participant.cpp
     src/rtps/types.cpp
+    src/rtps/cdr.cpp
 )
 
 target_include_directories(cppdds_lib
