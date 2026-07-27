@@ -294,6 +294,20 @@ std::optional<Locator> SedpService::reader_locator(const GUID& reader_guid) cons
     return it->second;
 }
 
+std::vector<Locator> SedpService::matched_reader_locators_for_topic(const std::string& topic_name) const {
+    std::lock_guard<std::mutex> lock(mu_);
+    std::vector<Locator>         locators;
+    for (const auto& [guid, info] : remote_readers_) {
+        if (info.topic_name != topic_name) continue;
+        auto it = remote_reader_locs_.find(guid);
+        if (it == remote_reader_locs_.end() || it->second.kind == Locator::kKindInvalid) continue;
+        if (std::find(locators.begin(), locators.end(), it->second) == locators.end()) {
+            locators.push_back(it->second);
+        }
+    }
+    return locators;
+}
+
 void SedpService::announce_writer(const EndpointInfo& info, const ParticipantProxy* only_to) {
     auto payload = build_endpoint_data(info, config_.data_unicast_port);
     uint32_t seq_low = seq_counter_.fetch_add(1, std::memory_order_relaxed) + 1;

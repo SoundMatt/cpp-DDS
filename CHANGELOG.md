@@ -6,6 +6,51 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.8.0] — 2026-07-27
+
+### Added
+
+- RTPS Tier-1 sub-phase 6 (see `ROADMAP.md`, "Tier 1 — RTPS wire protocol",
+  phase 6 "Entities & history cache"): `dds::rtps::Participant` under
+  `include/dds/rtps/participant.hpp` + `src/rtps/participant.cpp` — a new,
+  complete `dds::IParticipant` implementation over real RTPS/UDP wiring
+  together phases 1–5 (wire types, discovery CDR, UDP transport, SPDP, SEDP)
+  into working best-effort pub/sub: participant/writer/reader entity
+  lifecycle, an SPDP→SEDP peer-bridge poll loop, and a data receive thread
+  that decodes inbound DATA submessages and dispatches them to matching
+  local readers.
+- `dds::rtps::HistoryCache` (`include/dds/rtps/history_cache.hpp`): a
+  bounded, sequence-number-indexed per-endpoint change store (matching
+  go-DDS's `maxHistoryDepth`-256 window), populated by every writer write —
+  scaffolding for phase 7 (reliable delivery) to consume, not yet used for
+  retransmission.
+- `entity_id_for_writer`/`entity_id_for_reader`/`new_guid_prefix` added to
+  `include/dds/rtps/types.hpp` (entity/participant identity allocation,
+  matching go-DDS's `guid.go` kind-byte convention and PID-seeded random
+  prefix).
+- `SedpService::matched_reader_locators_for_topic` added to
+  `include/dds/rtps/sedp.hpp` (the write-path mirror of the existing
+  `matched_writer_guids_for_reader`): every remote reader locator matched
+  to a topic, deduplicated.
+- Writer::write composes only already byte-verified wire primitives from
+  phases 1–2/4–5 (`DataSubmessage::encode`, `cdr_wrap_payload`,
+  `wrap_in_rtps_message`) — this phase introduces no new wire encoding of
+  its own. Verified with a live two-`Participant` test exchanging a real
+  sample over loopback UDP once SEDP-matched, plus same-process delivery,
+  topic isolation, TransientLocal late-joiner delivery,
+  `QoS.max_sample_size` enforcement, and SPDP→SEDP bridge-loop tests
+  (221/221 total). Verified locally with Release C++17/C++20 builds and a
+  Debug ASan+UBSan pass on macOS/AppleClang; CI additionally exercises
+  Linux/gcc-12 ASan+UBSan.
+- Scope: best-effort delivery only (Reliable QoS is accepted but behaves
+  identically to BestEffort until phase 7 lands); no fragmentation, loan
+  integration, IPv6, security, or TSN. `dds::rtps::Participant` is a new,
+  separate `dds::IParticipant` implementation living alongside
+  `dds::mock`'s — deliberately not wired into `dds::adapt()`'s default
+  selection or any automatic-transport-selection surface.
+
+---
+
 ## [0.7.0] — 2026-07-27
 
 ### Added

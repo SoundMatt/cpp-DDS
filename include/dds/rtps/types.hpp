@@ -254,4 +254,34 @@ struct DataSubmessage {
     static std::optional<DataSubmessage> decode(const uint8_t* data, std::size_t len);
 };
 
+// ── Participant/entity identity allocation ──────────────────────────────────
+//
+// Added for Tier-1 phase 6 ("Entities & history cache" — see ROADMAP.md).
+// C++ port of go-DDS's rtps/guid.go newGuidPrefix/entityIdForWriter/
+// entityIdForReader. These are identity-allocation algorithms, not a fixed
+// wire encoding, so there is no golden-vector byte-exactness requirement
+// (unlike GUID::encode/decode above) — only the well-known entity-kind byte
+// convention (0x03 = user-defined writer, no key; 0x04 = user-defined
+// reader, no key) needs to match so peers correctly classify the endpoint.
+
+// Generates a random GuidPrefix for a new participant: 8 random bytes plus
+// the low 4 bytes of the process ID (so participants on the same host are
+// distinguishable even if the random source is degraded), matching
+// go-DDS's newGuidPrefix.
+GuidPrefix new_guid_prefix();
+
+// Returns a user-defined writer EntityId (kind byte 0x03 = no key) for
+// ordinal n, matching go-DDS's entityIdForWriter.
+constexpr EntityId entity_id_for_writer(uint32_t n) noexcept {
+    return EntityId{{static_cast<uint8_t>(n >> 16), static_cast<uint8_t>(n >> 8),
+                      static_cast<uint8_t>(n), 0x03}};
+}
+
+// Returns a user-defined reader EntityId (kind byte 0x04 = no key) for
+// ordinal n, matching go-DDS's entityIdForReader.
+constexpr EntityId entity_id_for_reader(uint32_t n) noexcept {
+    return EntityId{{static_cast<uint8_t>(n >> 16), static_cast<uint8_t>(n >> 8),
+                      static_cast<uint8_t>(n), 0x04}};
+}
+
 } // namespace dds::rtps
