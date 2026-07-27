@@ -146,6 +146,16 @@ struct VendorId {
 // go-DDS's vendor ID (message.go: goVendorId = [2]byte{0x01, 0x27}).
 inline constexpr VendorId kVendorIdGoDDS{{0x01, 0x27}};
 
+// cpp-DDS's own vendor ID: unregistered (not an OMG-assigned vendor ID,
+// same status as go-DDS's own 0x0127 — see message.go's "unregistered;
+// 0x0127 = arbitrary" comment), used for locally-originated RTPS messages
+// starting with Tier-1 phase 4 (SPDP). ASCII "cp" — arbitrary but
+// memorable, and deliberately distinct from kVendorIdGoDDS. This field is
+// purely informational on the wire (RTPS parsing does not gate on vendor
+// ID); interop reference-vector tests still pin kVendorIdGoDDS explicitly
+// where byte-exact match against go-DDS's own output is required.
+inline constexpr VendorId kVendorIdCppDDS{{0x63, 0x70}};
+
 // ── Header (RTPS 2.3 §9.4.1) ─────────────────────────────────────────────────
 
 // Header is the fixed 20-byte RTPS message header, including the leading

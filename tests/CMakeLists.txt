@@ -6,6 +6,7 @@ add_executable(cppdds_tests
     test_rtps_cdr.cpp
     test_rtps_transport.cpp
     test_rtps_traffic.cpp
+    test_rtps_spdp.cpp
 )
 
 target_link_libraries(cppdds_tests
