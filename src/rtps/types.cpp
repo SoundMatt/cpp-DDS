@@ -10,6 +10,17 @@
 // include/dds/rtps/types.hpp for the phase scope and the module doc
 // comment there for the byte-identity contract this file must uphold.
 
+#include <random>
+
+#if defined(_WIN32)
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <windows.h>
+#else
+#  include <unistd.h>
+#endif
+
 namespace dds::rtps {
 
 namespace {
@@ -188,6 +199,33 @@ std::optional<DataSubmessage> DataSubmessage::decode(const uint8_t* data, std::s
         ds.payload.assign(body + 20, body + body_len);
     }
     return ds;
+}
+
+// ── Participant/entity identity allocation ──────────────────────────────────
+
+GuidPrefix new_guid_prefix() {
+    GuidPrefix p;
+    // 8 bytes of entropy. std::random_device rather than the C standard
+    // library's legacy pseudo-random generator, matching spdp.cpp's own
+    // jitter-source rationale (CWE-330 / hidden global state under
+    // concurrent use).
+    std::random_device rd;
+    for (std::size_t i = 0; i < 8; ++i) {
+        p.bytes[i] = static_cast<uint8_t>(rd());
+    }
+    // Low 4 bytes of the process ID, matching go-DDS's newGuidPrefix — keeps
+    // participants on the same host distinguishable even if rd() degrades
+    // to a fixed value (some sandboxed environments do this).
+#if defined(_WIN32)
+    uint32_t pid = static_cast<uint32_t>(::GetCurrentProcessId());
+#else
+    uint32_t pid = static_cast<uint32_t>(::getpid());
+#endif
+    p.bytes[8]  = static_cast<uint8_t>(pid);
+    p.bytes[9]  = static_cast<uint8_t>(pid >> 8);
+    p.bytes[10] = static_cast<uint8_t>(pid >> 16);
+    p.bytes[11] = static_cast<uint8_t>(pid >> 24);
+    return p;
 }
 
 } // namespace dds::rtps

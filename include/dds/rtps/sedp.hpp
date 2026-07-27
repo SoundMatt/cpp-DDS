@@ -227,6 +227,16 @@ public:
     // Data-delivery locator for a matched remote reader, if known.
     std::optional<Locator> reader_locator(const GUID& reader_guid) const;
 
+    // Data-delivery locators for every remote reader subscribed to
+    // topic_name, deduplicated (a remote participant with multiple readers
+    // on the same topic contributes one locator). Added for Tier-1 phase 6
+    // ("Entities & history cache"): the write-path mirror of
+    // matched_writer_guids_for_reader — a local writer needs "every remote
+    // reader locator for my topic" the same way a local reader needs "every
+    // remote writer GUID for my topic". C++ port of go-DDS's
+    // participant.matchedReaderLocators (rtps/participant.go).
+    std::vector<Locator> matched_reader_locators_for_topic(const std::string& topic_name) const;
+
     uint64_t endpoint_matches() const noexcept { return endpoint_matches_.load(); }
     uint64_t announces_sent() const noexcept { return announces_sent_.load(); }
     uint64_t announces_received() const noexcept { return announces_received_.load(); }

@@ -186,12 +186,59 @@ buildable and testable against go-DDS's file of the same concern):
    sedp.hpp's file-level scope note. Internal to `cppdds_lib`, under
    `dds/rtps/` — not yet wired into `dds::IParticipant`/`relay::INode` or
    consumed by entities (phase 6, next).
-6. **Entities & history cache** — participant/writer/reader entity lifecycle and the
+6. [x] **Entities & history cache** — participant/writer/reader entity lifecycle and the
    per-endpoint HistoryCache that everything else plugs into. This is go-DDS's single
    largest file by far (`participant.go`, 1,505 LOC — more than a third of the whole
    `rtps` package) and is where phases 1–5 get wired together into working best-effort
    pub/sub. Expect cpp-DDS's equivalent to be its largest new file too; scope it as its
-   own point release rather than folding it into the phase-4/5 release.
+   own point release rather than folding it into the phase-4/5 release. **Done (v0.8.0):**
+   `include/dds/rtps/participant.hpp` + `src/rtps/participant.cpp` (`dds::rtps::Participant`:
+   a new, complete `dds::IParticipant` implementation over real RTPS/UDP — binds
+   meta/data unicast sockets via the participant-index 0..15 retry go-DDS's
+   `newParticipant` uses, owns an `SpdpService` + `SedpService` pair, bridges
+   SPDP-discovered peers into SEDP via a poll loop that diffs `SpdpService::peers()`
+   and calls the existing `on_new_peer`/`on_peer_evicted` hooks, and runs a data
+   receive thread that decodes inbound DATA submessages and dispatches them to
+   matching local readers) plus `include/dds/rtps/history_cache.hpp`
+   (`dds::rtps::HistoryCache`: a bounded, sequence-number-indexed per-endpoint
+   store, matching go-DDS's `maxHistoryDepth`-256 window — populated by every
+   writer write, not yet consumed by anything since retransmission doesn't exist
+   until phase 7). `Participant::new_publisher`/`new_subscriber` allocate
+   `EntityId`s via the new `entity_id_for_writer`/`entity_id_for_reader`
+   (`types.hpp`, matching go-DDS's kind-byte convention) and a random
+   `new_guid_prefix()` (matching go-DDS's `newGuidPrefix`: random entropy +
+   process-ID bytes). `Writer::write` composes only already byte-verified wire
+   primitives from phases 1–2/4–5 (`DataSubmessage::encode`, `cdr_wrap_payload`,
+   `wrap_in_rtps_message`) — this phase introduces no new wire encoding of its
+   own — delivering unconditionally to local (same-participant) readers by topic
+   name and, via a new `SedpService::matched_reader_locators_for_topic` query
+   (the write-path mirror of the existing `matched_writer_guids_for_reader`),
+   unicast to every SEDP-matched remote reader locator. Scope: **best-effort
+   delivery only** — Reliable QoS is accepted but behaves identically to
+   BestEffort until phase 7 lands; no fragmentation, loan integration, IPv6,
+   security, or TSN (later phases/tiers); no INFO_TS-carried publish timestamps
+   (`Sample::timestamp` is always local wall-clock time). `dds::rtps::Participant`
+   is a new, separate `dds::IParticipant` implementation living alongside
+   `dds::mock`'s — deliberately **not** wired into `dds::adapt()`'s default
+   selection or any automatic-transport-selection surface (still the unchecked
+   `dds/auto/` item below); callers construct it explicitly, exactly as they
+   would construct `dds::mock::create(...)`. Verified with a live two-`Participant`
+   test that exchanges a real sample over loopback UDP once SEDP-matched (feeding
+   each `SedpService` a `ParticipantProxy` for the other directly, standing in for
+   SPDP convergence — already covered at the `SpdpService` level in
+   `test_rtps_spdp.cpp` — so this test exercises the phase-6-specific path: a
+   real `Writer::write()` producing UDP bytes a real `Participant::data_loop()`
+   receives, decodes, SEDP-matches, and delivers into a real `Reader`'s channel),
+   plus same-process delivery, topic isolation, TransientLocal late-joiner
+   delivery, QoS.max_sample_size enforcement, and the SPDP→SEDP bridge loop
+   (221/221 tests). Verified locally with Release C++17/C++20 builds (the
+   project's C++20 CI leg is affected by a pre-existing `CMakeLists.txt` quirk —
+   `set(CMAKE_CXX_STANDARD 17)` unconditionally shadows any `-DCMAKE_CXX_STANDARD=`
+   passed on the command line — so the new files were additionally verified to
+   compile warning-clean under a genuine `-std=c++20` invocation directly) and a
+   Debug ASan+UBSan pass on macOS/AppleClang, 221/221 tests; CI additionally
+   exercises Linux/gcc-12 ASan+UBSan. Internal to `cppdds_lib`, under `dds/rtps/`
+   — phase 7 (reliable delivery, next) depends on this phase's `HistoryCache`.
 7. **Reliable delivery** — HEARTBEAT/ACKNACK sliding-window retransmission (§8.4.9–
    §8.4.12): a reliable writer sends HEARTBEAT after every write and periodically,
    advertising its send-history window; a reliable reader tracks received sequence
@@ -216,6 +263,11 @@ delivery, since reliable QoS depends on phase 6's scaffolding):
 - `v0.2.2` — phase 6 (entities + history cache; best-effort pub/sub works end to end)
 - `v0.2.3` — phase 7 (reliable delivery)
 - `v0.2.4` — phases 8–10 (fragmentation, loan integration, IPv6)
+
+(Actual tags diverged from this original `v0.2.x` suggestion once phase 1 landed —
+each phase shipped as its own incrementing `v0.MINOR.0` release instead:
+v0.3.0=phase 1, v0.4.0=phase 2, v0.5.0=phase 3, v0.6.0=phase 4, v0.7.0=phase 5,
+v0.8.0=phase 6 — see each phase's own "Done (vX.Y.0)" note above.)
 
 Also within `ddscore` but not RTPS-specific, carried forward from the previous roadmap
 draft and small enough to slot in opportunistically alongside Tier 1 rather than blocking
