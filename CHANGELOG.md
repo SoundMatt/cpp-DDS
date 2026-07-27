@@ -6,6 +6,48 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.9.0] — 2026-07-27
+
+### Added
+
+- RTPS Tier-1 sub-phase 7 (see `ROADMAP.md`, "Tier 1 — RTPS wire protocol",
+  phase 7 "Reliable delivery"): `Heartbeat`/`AckNack`/`Gap` submessage types
+  in `include/dds/rtps/types.hpp` + `src/rtps/types.cpp`, verified
+  byte-for-byte against go-DDS reference vectors in the new
+  `tests/test_rtps_reliable.cpp`.
+- `dds::rtps::RecvTracker` (`include/dds/rtps/reliable.hpp`, header-only): a
+  reader-side sliding-window gap tracker — port of go-DDS's `reliable.go`
+  `recvTracker`. `reliable.go`'s sender-side `sendHistory` is not
+  separately re-ported: phase 6's `HistoryCache` already serves that role.
+- `include/dds/rtps/persist.hpp` + `src/rtps/persist.cpp`
+  (`persist_load`/`persist_flush`/`persist_path`): byte-for-byte port of
+  go-DDS's `persist.go` TransientLocal-style disk durability file format.
+- `dds::rtps::Participant`'s `Writer` now sends HEARTBEAT immediately after
+  every reliable write and periodically from a per-writer background thread
+  (`ParticipantOptions::heartbeat_period`), and retransmits (or sends GAP
+  for an evicted range of) requested sequence numbers on receipt of
+  ACKNACK, broadcasting to every SEDP-matched reader locator. `Reader` now
+  tracks a `RecvTracker` per matched remote writer and sends ACKNACK on a
+  detected gap, from both DATA arrival and HEARTBEAT receipt.
+  `ParticipantOptions::persist_dir` flushes every publish to disk and backs
+  `TransientLocal` late-joiner delivery when no in-memory sample exists.
+  `Participant::close()` now closes every still-registered writer (stopping
+  its heartbeat thread) via a new `writers_` registry, mirroring the
+  existing `readers_` registry.
+- Verified with byte-exact HEARTBEAT/ACKNACK/GAP reference-vector tests,
+  `RecvTracker`/persistence behavioral unit tests, and five end-to-end
+  tests driving a real `Participant` over real loopback UDP (248/248
+  total). Verified locally with Release C++17/C++20 builds and a Debug
+  ASan+UBSan pass on macOS/AppleClang; CI additionally exercises
+  Linux/gcc-12 ASan+UBSan.
+- Scope: internal to `cppdds_lib`, under `dds/rtps/` — not yet wired into
+  `dds::IParticipant`'s public surface beyond `dds::rtps::Participant`
+  itself, nor into any automatic-transport-selection surface. go-DDS's
+  `waitDrain`/`CloseWithDrain` (blocking until all writes are ACKed) is out
+  of scope for this phase.
+
+---
+
 ## [0.8.0] — 2026-07-27
 
 ### Added

@@ -254,6 +254,84 @@ struct DataSubmessage {
     static std::optional<DataSubmessage> decode(const uint8_t* data, std::size_t len);
 };
 
+// ── HEARTBEAT submessage (RTPS 2.3 §9.4.5.7 / go-DDS message.go §9.4.5.5) ───
+//
+// Added for Tier-1 phase 7 ("Reliable delivery — HEARTBEAT/ACKNACK", see
+// ROADMAP.md). C++ port of go-DDS's Heartbeat/marshalHeartbeat/parseHeartbeat
+// (rtps/message.go). A reliable writer sends this after every write and
+// periodically to advertise the sequence-number span still held in its
+// history, so a reliable reader can detect and NACK gaps.
+
+// Heartbeat holds the fields of a HEARTBEAT submessage.
+struct Heartbeat {
+    EntityId       reader_entity_id{};
+    EntityId       writer_entity_id{};
+    SequenceNumber first_sn{}; // lowest SN still in the writer's history
+    SequenceNumber last_sn{};  // highest SN sent so far
+    int32_t        count{0};  // monotonically increasing per writer
+
+    // Builds the full submessage (4-byte SubmessageHeader + 28-byte body) and
+    // appends it to out, matching go-DDS's marshalHeartbeat exactly:
+    // readerEID(4) + writerEID(4) + firstSN.high(4 LE) + firstSN.low(4 LE) +
+    // lastSN.high(4 LE) + lastSN.low(4 LE) + count(4 LE) = 28 bytes.
+    void encode(std::vector<uint8_t>& out) const;
+
+    // Parses a full HEARTBEAT submessage (header + body) from data[0..len).
+    // Returns std::nullopt on malformed input.
+    static std::optional<Heartbeat> decode(const uint8_t* data, std::size_t len);
+};
+
+// ── ACKNACK submessage (RTPS 2.3 §9.4.5.6 / go-DDS message.go §9.4.5.1) ─────
+//
+// AckNack holds the fields of an ACKNACK submessage. Matching go-DDS, this
+// port uses a fixed single 32-bit bitmap word (NumBits always 32 on the
+// wire) rather than the general variable-length SequenceNumberSet the OMG
+// spec allows — go-DDS's own reliability window never needs more than one
+// word, and this is a byte-exact port of that choice, not an independent
+// simplification.
+struct AckNack {
+    EntityId       reader_entity_id{};
+    EntityId       writer_entity_id{};
+    SequenceNumber base{};   // first missing sequence number
+    uint32_t       bitmap{0}; // bit N set => base+N is missing
+    int32_t        count{0};
+
+    // Builds the full submessage (4-byte SubmessageHeader + 28-byte body) and
+    // appends it to out, matching go-DDS's marshalAckNack exactly:
+    // readerEID(4) + writerEID(4) + base.high(4 LE) + base.low(4 LE) +
+    // numBits(4 LE, always 32) + bitmap(4 LE) + count(4 LE) = 28 bytes.
+    void encode(std::vector<uint8_t>& out) const;
+
+    // Parses a full ACKNACK submessage (header + body) from data[0..len).
+    // The numBits field is read but not validated (matching go-DDS's
+    // parseAckNack, which always treats it as 32). Returns std::nullopt on
+    // malformed input.
+    static std::optional<AckNack> decode(const uint8_t* data, std::size_t len);
+};
+
+// ── GAP submessage (RTPS 2.3 §9.4.5.4) ───────────────────────────────────────
+//
+// Gap indicates a contiguous range of sequence numbers permanently
+// unavailable from a writer (evicted from history before a NACK could be
+// satisfied). Encode-only, matching go-DDS's marshalGAP: go-DDS never
+// defines a parseGAP either (see rtps/message.go) — sent so a reliable
+// reader *could* advance past a permanently-lost range, but not currently
+// consumed by go-DDS's own receive path, and this port preserves that exact
+// asymmetry rather than adding a parse path go-DDS itself doesn't have.
+struct Gap {
+    EntityId       reader_entity_id{};
+    EntityId       writer_entity_id{};
+    SequenceNumber gap_start{}; // first irrelevant SN (inclusive)
+    SequenceNumber gap_end{};   // last irrelevant SN (inclusive)
+
+    // Builds the full submessage (4-byte SubmessageHeader + 28-byte body)
+    // covering [gap_start, gap_end] inclusive and appends it to out,
+    // matching go-DDS's marshalGAP exactly: readerEID(4) + writerEID(4) +
+    // gapStart(8) + gapList.bitmapBase(8, = gapEnd+1) +
+    // gapList.numBits(4 LE, = 0) = 28 bytes.
+    void encode(std::vector<uint8_t>& out) const;
+};
+
 // ── Participant/entity identity allocation ──────────────────────────────────
 //
 // Added for Tier-1 phase 6 ("Entities & history cache" — see ROADMAP.md).

@@ -10,6 +10,7 @@ add_executable(cppdds_tests
     test_rtps_sedp.cpp
     test_rtps_history_cache.cpp
     test_rtps_participant.cpp
+    test_rtps_reliable.cpp
 )
 
 target_link_libraries(cppdds_tests

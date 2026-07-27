@@ -167,7 +167,7 @@ jobs:
         run: go install github.com/SoundMatt/RELAY/cmd/relay@latest
 
       - name: RELAY conformance gate
-        run: relay conform ./build/cli/cpp-dds --strict
+        run: relay conform --strict ./build/cli/cpp-dds
 
       # §20.1 item 3 / §20.2: convert's output MUST equal the reference
       # relay.Message for every golden vector of this implementation's

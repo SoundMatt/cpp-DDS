@@ -239,12 +239,62 @@ buildable and testable against go-DDS's file of the same concern):
    Debug ASan+UBSan pass on macOS/AppleClang, 221/221 tests; CI additionally
    exercises Linux/gcc-12 ASan+UBSan. Internal to `cppdds_lib`, under `dds/rtps/`
    — phase 7 (reliable delivery, next) depends on this phase's `HistoryCache`.
-7. **Reliable delivery** — HEARTBEAT/ACKNACK sliding-window retransmission (§8.4.9–
+7. [x] **Reliable delivery** — HEARTBEAT/ACKNACK sliding-window retransmission (§8.4.9–
    §8.4.12): a reliable writer sends HEARTBEAT after every write and periodically,
    advertising its send-history window; a reliable reader tracks received sequence
    numbers and sends ACKNACK on a detected gap; the writer retransmits the requested
    range from history. Depends on phase 6's history cache. Reference: `reliable.go`
    (231 LOC) + `persist.go` (87 LOC, TransientLocal-style durability persistence).
+   **Done (v0.9.0):** `Heartbeat`/`AckNack`/`Gap` submessage types added to
+   `include/dds/rtps/types.hpp` + `src/rtps/types.cpp` (the well-known submessage-ID
+   constants phase 1 already reserved for this phase), verified byte-for-byte against
+   go-DDS reference vectors (calling go-DDS's actual `marshalHeartbeat`/
+   `marshalAckNack`/`marshalGAP` functions directly) in the new
+   `tests/test_rtps_reliable.cpp`. New `include/dds/rtps/reliable.hpp`
+   (`dds::rtps::RecvTracker`, `sn_to_u64`/`u64_to_sn`, `kHeartbeatPeriod`,
+   `kMaxReorderAhead`): a header-only C++ port of `reliable.go`'s *receiver*-side
+   sliding-window gap tracker, matching `history_cache.hpp`'s existing header-only
+   precedent — `reliable.go`'s *sender*-side `sendHistory` is deliberately not
+   re-ported, since phase 6's `HistoryCache` already serves that role exactly as its
+   own file-level scope note anticipated ("be the storage phase 7 wraps for
+   retransmission"). New `include/dds/rtps/persist.hpp` + `src/rtps/persist.cpp`: a
+   byte-for-byte port of `persist.go`'s `persistLoad`/`persistFlush`/`persistPath`
+   file format (4-byte LE length prefix + payload at
+   `<dir>/topic-<sanitised(topic)>.bin`). `include/dds/rtps/participant.hpp` +
+   `src/rtps/participant.cpp` wire these together: `Writer` gains a per-instance
+   background HEARTBEAT thread (started when reliable, joined in `close()`/
+   `~Writer()`, period configurable via `ParticipantOptions::heartbeat_period`),
+   sends HEARTBEAT immediately after every reliable write, and — on receipt of
+   ACKNACK — retransmits every still-retained requested sequence number (re-encoding
+   a fresh DATA submessage from the matching `HistoryCache::CacheChange`, broadcasting
+   to every SEDP-matched reader locator, not just the ACKNACK sender) plus a GAP for
+   any requested range already evicted from history, matching go-DDS's
+   `handleAckNack` exactly — including its asymmetry that GAP is sent but never
+   parsed on receipt, since go-DDS itself has no `parseGAP` either. `Reader` gains a
+   `RecvTracker` per matched remote writer GUID, updated on every DATA arrival and
+   HEARTBEAT receipt, sending ACKNACK back to the sender whenever a gap is detected —
+   both `Reliable QoS` and `BestEffort QoS` share the same dispatch path (delivery is
+   never blocked or reordered by reliability bookkeeping, matching go-DDS). A new
+   `writers_` weak_ptr registry on `Participant` (mirroring the existing `readers_`
+   registry) lets `Participant::close()` close every still-registered writer (stopping
+   every heartbeat thread) before tearing down sockets, matching go-DDS's
+   `participant.Close()` snapshot-and-close-every-`rtpsWriter` behavior.
+   `ParticipantOptions::persist_dir` (this port's `WithPersistentHistory` equivalent)
+   flushes every writer's every publish to disk when set, and a `TransientLocal`
+   subscriber falls back to the on-disk copy when no in-memory `last_sample` exists
+   yet. Verified with byte-exact HEARTBEAT/ACKNACK/GAP reference-vector tests,
+   `RecvTracker`/persistence behavioral unit tests, and five end-to-end tests driving
+   a real `Participant` over real loopback UDP against a raw-socket stand-in for the
+   remote peer (gap-from-DATA and gap-from-HEARTBEAT detection + ACKNACK + delivery
+   of the simulated retransmit; writer HEARTBEAT-after-write-and-periodic; writer
+   retransmit-from-history on ACKNACK; writer GAP-for-evicted-range on ACKNACK) —
+   248/248 tests, verified locally with Release C++17/C++20 builds and a Debug
+   ASan/UBSan pass on macOS/AppleClang; CI additionally exercises Linux/gcc-12
+   ASan+UBSan. `go-DDS`'s `waitDrain`/`CloseWithDrain` (blocking until all writes are
+   ACKed) is out of scope — not required by this phase's roadmap text and not exposed
+   anywhere yet. Internal to `cppdds_lib`, under `dds/rtps/` — not yet wired into
+   `dds::IParticipant`'s public surface beyond `dds::rtps::Participant` itself, nor
+   into any automatic-transport-selection surface.
 8. **Fragmentation** — `FragmentedData` submessages for payloads over 64 KB. Reference:
    `fragment.go` (231 LOC).
 9. **Loan integration** (stretch, can slip to a `v0.2.x` point release without blocking
@@ -267,7 +317,7 @@ delivery, since reliable QoS depends on phase 6's scaffolding):
 (Actual tags diverged from this original `v0.2.x` suggestion once phase 1 landed —
 each phase shipped as its own incrementing `v0.MINOR.0` release instead:
 v0.3.0=phase 1, v0.4.0=phase 2, v0.5.0=phase 3, v0.6.0=phase 4, v0.7.0=phase 5,
-v0.8.0=phase 6 — see each phase's own "Done (vX.Y.0)" note above.)
+v0.8.0=phase 6, v0.9.0=phase 7 — see each phase's own "Done (vX.Y.0)" note above.)
 
 Also within `ddscore` but not RTPS-specific, carried forward from the previous roadmap
 draft and small enough to slot in opportunistically alongside Tier 1 rather than blocking
