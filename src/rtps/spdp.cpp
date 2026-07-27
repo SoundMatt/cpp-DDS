@@ -10,11 +10,24 @@
 // deviations from a literal line-for-line port.
 
 #include <algorithm>
-#include <cstdlib>
+#include <random>
 
 namespace dds::rtps {
 
 namespace {
+
+// Random jitter source for announce_loop, below. A thread-local
+// std::mt19937 (seeded once per thread from std::random_device) rather
+// than the C library's rand()/srand(): std::rand() is not reentrant/
+// thread-safe (its hidden global state is a data race under concurrent
+// use) and is flagged by cpfusa's cybersecurity analysis (CWE-330) even
+// for a non-cryptographic use like send-timing jitter.
+uint32_t jitter_random_u32(uint32_t bound) {
+    if (bound == 0) return 0;
+    thread_local std::mt19937 rng{std::random_device{}()};
+    std::uniform_int_distribution<uint32_t> dist(0, bound - 1);
+    return dist(rng);
+}
 
 inline void put_u32_le(std::vector<uint8_t>& out, uint32_t v) {
     out.push_back(static_cast<uint8_t>(v));
@@ -331,8 +344,8 @@ void SpdpService::announce_loop() {
         // shutdown responsiveness stays bounded by kShutdownPollSlice.
         auto wait = period;
         if (config_.jitter.count() > 0) {
-            auto jitter_ms = static_cast<long long>(config_.jitter.count());
-            wait += std::chrono::milliseconds(std::rand() % (jitter_ms > 0 ? jitter_ms : 1));
+            auto jitter_ms = static_cast<uint32_t>(config_.jitter.count());
+            wait += std::chrono::milliseconds(jitter_random_u32(jitter_ms));
         }
 
         std::chrono::milliseconds elapsed{0};
