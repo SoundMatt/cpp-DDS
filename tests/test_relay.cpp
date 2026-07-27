@@ -171,9 +171,9 @@ TEST_CASE("with_topic option", "[relay][REQ-RELAY-056]") {
 
 // ── kSpecVersion ──────────────────────────────────────────────────────────────
 
-TEST_CASE("kRelaySpecVersion is 1.10", "[relay][REQ-RELAY-020]") {
-    CHECK(std::string(kRelaySpecVersion) == "1.10");
-    CHECK(std::string(kSpecVersion)      == "1.10"); // legacy alias
+TEST_CASE("kRelaySpecVersion is 1.11", "[relay][REQ-RELAY-020]") {
+    CHECK(std::string(kRelaySpecVersion) == "1.11");
+    CHECK(std::string(kSpecVersion)      == "1.11"); // legacy alias
 }
 
 // ── INode / ICaller abstract ──────────────────────────────────────────────────

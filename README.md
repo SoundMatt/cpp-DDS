@@ -12,7 +12,7 @@ RELAY-conformant — the `dds::IParticipant` interface is stable; transports are
 | `dds/dds.hpp` | Core `IParticipant`, `IPublisher`, `ISubscriber` interfaces, `Sample`, `QoS` | Nothing |
 | `dds/mock/participant.hpp` | In-process broadcast participant — zero OS deps, default for testing | `dds/dds.hpp` |
 | `dds/relay.hpp` | RELAY spec types (`relay::Message`, `relay::INode`, error sentinels) | Nothing |
-| `dds/channel.hpp` | `dds::Chan<T>` — bounded, thread-safe FIFO channel | Nothing |
+| `dds/channel.hpp` | `relay::Channel<T>` — bounded, thread-safe FIFO channel (`dds::Chan<T>` alias) | Nothing |
 
 ## Build
 
@@ -106,8 +106,35 @@ All functions return `std::error_code`. DDS-specific errors map to relay sentine
 ```bash
 ./build/cpp-dds version
 ./build/cpp-dds conform
-./build/cpp-dds convert vehicle/speed DEADBEEF
+
+# §11.2 convert: reads a dds.Sample JSON value on stdin, writes the
+# resulting relay.Message JSON on stdout.
+echo '{
+  "topic": "vehicle/speed", "payload": "3q2+7w==",
+  "timestamp": "2026-01-01T00:00:00Z", "seq": 1,
+  "writer_guid": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+}' | ./build/cpp-dds convert --protocol DDS
 ```
+
+## Safety evidence (RELAY spec §20.4)
+
+| Evidence | File |
+|---|---|
+| Requirements registry | [`requirements/requirements.json`](requirements/requirements.json) |
+| HARA (hazard analysis and risk assessment) | [`HARA.md`](HARA.md) / [`.fusa-hara.json`](.fusa-hara.json) |
+| TARA (ISO/SAE 21434 threat analysis) | [`tara.md`](tara.md) / [`tara.json`](tara.json) |
+| dFMEA (generated failure-mode analysis) | [`fmea.csv`](fmea.csv) / [`fmea.json`](fmea.json) |
+
+Regenerate TARA/dFMEA with `cpfusa tara --dir .` / `cpfusa fmea --dir .`
+(from [cpp-FuSa](https://github.com/SoundMatt/cpp-FuSa)) after source changes;
+HARA is hand-maintained in `.fusa-hara.json` and validated by `cpfusa check`.
+CI (`.github/workflows/ci.yml` `fusa-asil-b` job) additionally gates on the
+ISO 21434 cybersecurity analysis (`cpfusa cyber`), a dependency vulnerability
+scan (`cpfusa vuln`), and the tool qualification suite (`cpfusa qualify`) per
+RELAY spec §20.1; the `relay-conform` job gates on `relay interop --protocol
+DDS --strict` (§20.1 item 3 / §20.2 behavioural conformance). Release tags
+additionally get an SBOM and build provenance attached by
+`.github/workflows/release.yml` per §20.5.
 
 ## License
 

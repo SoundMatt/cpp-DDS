@@ -34,7 +34,7 @@ namespace dds {
 
 // ── Spec version ─────────────────────────────────────────────────────────────
 
-inline constexpr const char* kSpecVersion = "1.10";
+inline constexpr const char* kSpecVersion = "1.11";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

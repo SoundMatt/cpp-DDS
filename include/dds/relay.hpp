@@ -4,7 +4,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 // relay.hpp — RELAY spec types shared across all protocol implementations.
-// Mirrors the RELAY Go package spec v1.10.
+// Mirrors the RELAY Go package spec v1.11.
 
 #pragma once
 
@@ -25,7 +25,7 @@ namespace relay {
 // ── Spec version ─────────────────────────────────────────────────────────────
 
 // fusa:req REQ-RELAY-020
-inline constexpr const char* kRelaySpecVersion = "1.10";
+inline constexpr const char* kRelaySpecVersion = "1.11";
 // Legacy alias kept so dds::kSpecVersion (which reads from relay) still works.
 inline constexpr const char* kSpecVersion      = kRelaySpecVersion;
 
@@ -189,7 +189,7 @@ public:
 
     virtual std::error_code send(Context ctx, const Message& msg) = 0;
 
-    virtual std::pair<std::shared_ptr<dds::Chan<Message>>, std::error_code>
+    virtual std::pair<std::shared_ptr<Channel<Message>>, std::error_code>
         subscribe(std::vector<SubscriberOption> opts = {}) = 0;
 
     virtual std::error_code close() noexcept = 0;

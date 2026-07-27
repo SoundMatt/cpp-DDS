@@ -169,6 +169,13 @@ jobs:
       - name: RELAY conformance gate
         run: relay conform ./build/cli/cpp-dds --strict
 
+      # §20.1 item 3 / §20.2: convert's output MUST equal the reference
+      # relay.Message for every golden vector of this implementation's
+      # protocol, checked against `relay convert`'s in-process reference
+      # participant (no second binary required).
+      - name: RELAY behavioural conformance gate (relay interop)
+        run: relay interop --protocol DDS --strict ./build/cli/cpp-dds
+
   fusa-asil-b:
     name: cpp-FuSa ASIL-B qualification
     runs-on: ubuntu-22.04
@@ -198,7 +205,7 @@ jobs:
 
       - name: cpfusa init
         working-directory: cpp-DDS
-        run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.1.0 --force || true
+        run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.2.0 --force || true
 
       - name: cpfusa check
         working-directory: cpp-DDS
@@ -211,6 +218,21 @@ jobs:
       - name: cpfusa trace (requirements traceability)
         working-directory: cpp-DDS
         run: ../cpp-FuSa/build/cpfusa trace --dir .
+
+      # §20.1 item 2 requires the full x-FuSa lifecycle, not a subset: standard
+      # check + traceability (above) plus cybersecurity analysis, dependency
+      # vulnerability scan, and tool qualification — all gating.
+      - name: cpfusa cyber (cybersecurity analysis, ISO 21434)
+        working-directory: cpp-DDS
+        run: ../cpp-FuSa/build/cpfusa cyber --write
+
+      - name: cpfusa vuln (dependency vulnerability scan)
+        working-directory: cpp-DDS
+        run: ../cpp-FuSa/build/cpfusa vuln
+
+      - name: cpfusa qualify (tool qualification suite)
+        working-directory: cpp-DDS
+        run: ../cpp-FuSa/build/cpfusa qualify
 
   dco:
     name: DCO check
@@ -267,7 +289,7 @@ jobs:
 
       - name: cpfusa init
         working-directory: cpp-DDS
-        run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.1.0 --force || true
+        run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.2.0 --force || true
 
       - name: Generate SARIF report
         working-directory: cpp-DDS

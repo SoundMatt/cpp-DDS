@@ -147,7 +147,7 @@ public:
         return ec;
     }
 
-    std::pair<std::shared_ptr<dds::Chan<relay::Message>>, std::error_code>
+    std::pair<std::shared_ptr<relay::Channel<relay::Message>>, std::error_code>
     subscribe(std::vector<relay::SubscriberOption> opts) override {
         relay::SubscriberConfig cfg = relay::apply_options(opts);
         int depth = cfg.effective_depth(static_cast<int>(kDefaultChanDepth));
@@ -159,7 +159,7 @@ public:
         auto [new_sub, err] = p_->new_subscriber(topic, default_qos(), opts);
         if (err) return {nullptr, err};
 
-        auto msg_ch    = std::make_shared<dds::Chan<relay::Message>>(static_cast<std::size_t>(depth));
+        auto msg_ch    = std::make_shared<relay::Channel<relay::Message>>(static_cast<std::size_t>(depth));
         auto sample_ch = new_sub->channel();
 
         // Forward samples; new_sub captured by value keeps subscriber alive for

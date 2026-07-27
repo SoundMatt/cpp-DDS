@@ -1,0 +1,373 @@
+ID,Component,FailureMode,Effect,Severity,Occurrence,Detectability,RPN,Action,File,Line
+FM-95,add,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,258
+FM-367,parse_protocol,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,55
+FM-3,parse_protocol,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,48
+FM-363,try_parse_protocol,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,35
+FM-359,NodeAdapter,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,132
+FM-354,NodeAdapter,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,130
+FM-7,try_parse_protocol,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,49
+FM-351,ErrDomainOutOfRange,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,73
+FM-347,equivalent,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,40
+FM-10,Version,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,54
+FM-342,DdsErrorCategory,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,22
+FM-339,ErrTimeout,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,384
+FM-335,domain,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,325
+FM-14,Message,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,68
+FM-331,f,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,308
+FM-327,MockParticipantImpl,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,277
+FM-322,MockParticipantImpl,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,275
+FM-18,Context,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,82
+FM-319,unsubscribe,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,252
+FM-314,MockSubscriber,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,230
+FM-311,ErrPayloadTooLarge,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,190
+FM-307,write,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,179
+FM-23,with_deadline,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,93
+FM-302,MockPublisher,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,164
+FM-299,update_last_sample,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,142
+FM-295,unsubscribe,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,128
+FM-27,done,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,96
+FM-291,publish,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,70
+FM-286,Broker,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,60
+FM-30,SubscriberConfig,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,141
+FM-282,SubscriptionEntry,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,53
+FM-278,DeliveryStats,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,45
+FM-274,ParticipantCounters,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,34
+FM-271,cmd_convert,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,348
+FM-35,effective_depth,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,152
+FM-267,cmd_conform,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,345
+FM-263,cmd_status,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,342
+FM-38,INode,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,184
+FM-259,cmd_capabilities,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,339
+FM-255,cmd_version,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,336
+FM-251,main,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,326
+FM-42,ICaller,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,199
+FM-247,ParseError,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,270
+FM-243,parse_number,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,259
+FM-239,ParseError,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,256
+FM-46,Health,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,210
+FM-235,parse_null,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,254
+FM-231,ParseError,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,251
+FM-227,parse_bool,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,248
+FM-50,IHealthProvider,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,215
+FM-223,parse_array,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,179
+FM-219,parse_object,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,158
+FM-215,parse_value,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,144
+FM-54,Metrics,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,222
+FM-211,ParseError,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,140
+FM-207,expect,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,138
+FM-203,skip_ws,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,132
+FM-58,IMetricsProvider,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,232
+FM-199,peek,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,127
+FM-195,DepthGuard,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,121
+FM-190,DepthGuard,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,119
+FM-62,IDrainer,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,239
+FM-187,parse,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,100
+FM-370,RelayErrorCategory,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,72
+FM-183,Parser,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,98
+FM-66,QoS,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,67
+FM-178,Parser,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,96
+FM-175,push_back,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,78
+FM-171,set,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,74
+FM-70,Sample,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,93
+FM-167,as_number,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,56
+FM-163,is_object,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,50
+FM-159,is_array,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,49
+FM-74,IPublisher,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,146
+FM-155,is_number,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,48
+FM-151,is_string,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,47
+FM-147,type,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,46
+FM-78,ISubscriber,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,167
+FM-142,Value,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,35
+FM-139,ParseError,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,30
+FM-134,ParseError,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,29
+FM-82,IParticipant,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,190
+FM-131,is_closed,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,114
+FM-127,close,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,107
+FM-123,send_drop_oldest,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,66
+FM-119,try_send,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,57
+FM-87,p,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,227
+FM-115,send,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,55
+FM-111,push,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,45
+FM-90,WaitSet,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,247
+FM-107,Channel,Buffer overflow,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,39
+FM-102,Channel,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,35
+FM-98,ILoaningPublisher,State corruption,Incorrect system behaviour or safety function failure,8,4,5,160,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,293
+FM-186,parse,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,100
+FM-372,RelayErrorCategory,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,72
+FM-96,add,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,258
+FM-97,ILoaningPublisher,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,293
+FM-93,add,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,258
+FM-99,ILoaningPublisher,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,293
+FM-100,ILoaningPublisher,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,293
+FM-101,Channel,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,35
+FM-92,WaitSet,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,247
+FM-103,Channel,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,35
+FM-104,Channel,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,35
+FM-105,Channel,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,39
+FM-106,Channel,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,39
+FM-91,WaitSet,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,247
+FM-108,Channel,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,39
+FM-109,push,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,45
+FM-110,push,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,45
+FM-89,WaitSet,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,247
+FM-112,push,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,45
+FM-113,send,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,55
+FM-114,send,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,55
+FM-88,p,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,227
+FM-116,send,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,55
+FM-117,try_send,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,57
+FM-118,try_send,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,57
+FM-86,p,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,227
+FM-120,try_send,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,57
+FM-121,send_drop_oldest,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,66
+FM-122,send_drop_oldest,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,66
+FM-85,p,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,227
+FM-124,send_drop_oldest,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,66
+FM-125,close,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,107
+FM-126,close,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,107
+FM-84,IParticipant,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,190
+FM-128,close,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,107
+FM-129,is_closed,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,114
+FM-130,is_closed,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,114
+FM-83,IParticipant,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,190
+FM-132,is_closed,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/channel.hpp,114
+FM-133,ParseError,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,29
+FM-81,IParticipant,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,190
+FM-135,ParseError,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,29
+FM-136,ParseError,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,29
+FM-137,ParseError,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,30
+FM-138,ParseError,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,30
+FM-80,ISubscriber,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,167
+FM-140,ParseError,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,30
+FM-141,Value,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,35
+FM-79,ISubscriber,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,167
+FM-143,Value,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,35
+FM-144,Value,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,35
+FM-145,type,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,46
+FM-146,type,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,46
+FM-77,ISubscriber,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,167
+FM-148,type,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,46
+FM-149,is_string,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,47
+FM-150,is_string,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,47
+FM-76,IPublisher,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,146
+FM-152,is_string,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,47
+FM-153,is_number,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,48
+FM-154,is_number,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,48
+FM-75,IPublisher,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,146
+FM-156,is_number,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,48
+FM-157,is_array,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,49
+FM-158,is_array,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,49
+FM-73,IPublisher,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,146
+FM-160,is_array,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,49
+FM-161,is_object,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,50
+FM-162,is_object,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,50
+FM-72,Sample,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,93
+FM-164,is_object,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,50
+FM-165,as_number,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,56
+FM-166,as_number,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,56
+FM-71,Sample,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,93
+FM-168,as_number,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,56
+FM-169,set,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,74
+FM-170,set,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,74
+FM-69,Sample,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,93
+FM-172,set,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,74
+FM-173,push_back,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,78
+FM-174,push_back,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,78
+FM-68,QoS,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,67
+FM-176,push_back,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,78
+FM-177,Parser,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,96
+FM-67,QoS,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,67
+FM-179,Parser,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,96
+FM-180,Parser,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,96
+FM-181,Parser,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,98
+FM-182,Parser,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,98
+FM-65,QoS,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,67
+FM-184,Parser,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,98
+FM-185,parse,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,100
+FM-64,IDrainer,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,239
+FM-63,IDrainer,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,239
+FM-1,parse_protocol,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,48
+FM-189,DepthGuard,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,119
+FM-61,IDrainer,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,239
+FM-191,DepthGuard,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,119
+FM-192,DepthGuard,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,119
+FM-193,DepthGuard,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,121
+FM-194,DepthGuard,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,121
+FM-60,IMetricsProvider,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,232
+FM-196,DepthGuard,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,121
+FM-197,peek,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,127
+FM-198,peek,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,127
+FM-59,IMetricsProvider,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,232
+FM-200,peek,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,127
+FM-201,skip_ws,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,132
+FM-202,skip_ws,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,132
+FM-57,IMetricsProvider,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,232
+FM-204,skip_ws,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,132
+FM-205,expect,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,138
+FM-206,expect,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,138
+FM-56,Metrics,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,222
+FM-208,expect,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,138
+FM-209,ParseError,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,140
+FM-210,ParseError,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,140
+FM-55,Metrics,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,222
+FM-212,ParseError,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,140
+FM-213,parse_value,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,144
+FM-214,parse_value,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,144
+FM-53,Metrics,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,222
+FM-216,parse_value,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,144
+FM-217,parse_object,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,158
+FM-218,parse_object,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,158
+FM-52,IHealthProvider,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,215
+FM-220,parse_object,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,158
+FM-221,parse_array,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,179
+FM-222,parse_array,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,179
+FM-51,IHealthProvider,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,215
+FM-224,parse_array,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,179
+FM-225,parse_bool,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,248
+FM-226,parse_bool,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,248
+FM-49,IHealthProvider,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,215
+FM-228,parse_bool,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,248
+FM-229,ParseError,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,251
+FM-230,ParseError,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,251
+FM-48,Health,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,210
+FM-232,ParseError,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,251
+FM-233,parse_null,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,254
+FM-94,add,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/dds.hpp,258
+FM-47,Health,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,210
+FM-236,parse_null,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,254
+FM-237,ParseError,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,256
+FM-238,ParseError,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,256
+FM-45,Health,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,210
+FM-240,ParseError,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,256
+FM-241,parse_number,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,259
+FM-242,parse_number,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,259
+FM-44,ICaller,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,199
+FM-244,parse_number,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,259
+FM-245,ParseError,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,270
+FM-246,ParseError,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,270
+FM-43,ICaller,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,199
+FM-248,ParseError,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,270
+FM-249,main,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,326
+FM-250,main,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,326
+FM-41,ICaller,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,199
+FM-252,main,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,326
+FM-253,cmd_version,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,336
+FM-254,cmd_version,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,336
+FM-40,INode,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,184
+FM-256,cmd_version,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,336
+FM-257,cmd_capabilities,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,339
+FM-258,cmd_capabilities,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,339
+FM-39,INode,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,184
+FM-260,cmd_capabilities,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,339
+FM-261,cmd_status,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,342
+FM-262,cmd_status,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,342
+FM-37,INode,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,184
+FM-264,cmd_status,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,342
+FM-265,cmd_conform,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,345
+FM-266,cmd_conform,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,345
+FM-36,effective_depth,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,152
+FM-268,cmd_conform,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,345
+FM-269,cmd_convert,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,348
+FM-270,cmd_convert,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,348
+FM-34,effective_depth,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,152
+FM-272,cmd_convert,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/main.cpp,348
+FM-273,ParticipantCounters,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,34
+FM-33,effective_depth,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,152
+FM-275,ParticipantCounters,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,34
+FM-276,ParticipantCounters,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,34
+FM-277,DeliveryStats,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,45
+FM-32,SubscriberConfig,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,141
+FM-279,DeliveryStats,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,45
+FM-280,DeliveryStats,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,45
+FM-281,SubscriptionEntry,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,53
+FM-31,SubscriberConfig,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,141
+FM-283,SubscriptionEntry,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,53
+FM-284,SubscriptionEntry,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,53
+FM-285,Broker,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,60
+FM-29,SubscriberConfig,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,141
+FM-287,Broker,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,60
+FM-288,Broker,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,60
+FM-289,publish,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,70
+FM-290,publish,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,70
+FM-28,done,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,96
+FM-292,publish,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,70
+FM-293,unsubscribe,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,128
+FM-294,unsubscribe,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,128
+FM-26,done,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,96
+FM-296,unsubscribe,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,128
+FM-297,update_last_sample,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,142
+FM-298,update_last_sample,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,142
+FM-25,done,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,96
+FM-300,update_last_sample,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,142
+FM-301,MockPublisher,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,164
+FM-24,with_deadline,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,93
+FM-303,MockPublisher,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,164
+FM-304,MockPublisher,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,164
+FM-305,write,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,179
+FM-306,write,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,179
+FM-22,with_deadline,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,93
+FM-308,write,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,179
+FM-309,ErrPayloadTooLarge,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,190
+FM-310,ErrPayloadTooLarge,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,190
+FM-21,with_deadline,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,93
+FM-312,ErrPayloadTooLarge,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,190
+FM-313,MockSubscriber,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,230
+FM-20,Context,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,82
+FM-315,MockSubscriber,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,230
+FM-316,MockSubscriber,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,230
+FM-317,unsubscribe,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,252
+FM-318,unsubscribe,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,252
+FM-19,Context,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,82
+FM-320,unsubscribe,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,252
+FM-321,MockParticipantImpl,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,275
+FM-17,Context,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,82
+FM-323,MockParticipantImpl,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,275
+FM-324,MockParticipantImpl,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,275
+FM-325,MockParticipantImpl,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,277
+FM-326,MockParticipantImpl,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,277
+FM-16,Message,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,68
+FM-328,MockParticipantImpl,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,277
+FM-329,f,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,308
+FM-330,f,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,308
+FM-15,Message,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,68
+FM-332,f,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,308
+FM-333,domain,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,325
+FM-334,domain,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,325
+FM-13,Message,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,68
+FM-336,domain,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,325
+FM-337,ErrTimeout,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,384
+FM-338,ErrTimeout,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,384
+FM-12,Version,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,54
+FM-340,ErrTimeout,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/mock/participant.cpp,384
+FM-341,DdsErrorCategory,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,22
+FM-11,Version,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,54
+FM-343,DdsErrorCategory,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,22
+FM-344,DdsErrorCategory,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,22
+FM-345,equivalent,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,40
+FM-346,equivalent,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,40
+FM-9,Version,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,54
+FM-348,equivalent,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,40
+FM-349,ErrDomainOutOfRange,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,73
+FM-350,ErrDomainOutOfRange,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,73
+FM-8,try_parse_protocol,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,49
+FM-352,ErrDomainOutOfRange,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,73
+FM-353,NodeAdapter,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,130
+FM-6,try_parse_protocol,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,49
+FM-355,NodeAdapter,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,130
+FM-356,NodeAdapter,Exception propagation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,130
+FM-357,NodeAdapter,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,132
+FM-358,NodeAdapter,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,132
+FM-5,try_parse_protocol,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,49
+FM-360,NodeAdapter,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/dds.cpp,132
+FM-361,try_parse_protocol,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,35
+FM-362,try_parse_protocol,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,35
+FM-4,parse_protocol,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,48
+FM-364,try_parse_protocol,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,35
+FM-365,parse_protocol,Incorrect return value,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,55
+FM-366,parse_protocol,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,55
+FM-2,parse_protocol,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./include/dds/relay.hpp,48
+FM-368,parse_protocol,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,55
+FM-369,RelayErrorCategory,Incorrect initialisation,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,72
+FM-188,parse,Race condition,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,100
+FM-371,RelayErrorCategory,Memory leak,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./src/relay.cpp,72
+FM-234,parse_null,Unhandled error,Incorrect system behaviour or safety function failure,5,3,4,60,"Add defensive checks, RAII ownership, and unit test coverage",./cli/json_lite.hpp,254
