@@ -107,12 +107,18 @@ buildable and testable against go-DDS's file of the same concern):
    `include/dds/rtps/types.hpp` + `src/rtps/types.cpp`, verified byte-for-byte
    against go-DDS reference vectors in `tests/test_rtps_types.cpp`. Internal to
    `cppdds_lib` — not yet wired into `dds::IParticipant`/`relay::INode`.
-2. **Discovery-scoped CDR/PL_CDR encoding** — little-endian only (the de-facto standard
-   for modern RTPS), used to encode/decode SPDP/SEDP parameter lists (§10.2–§10.3).
-   Reference: `cdr.go` (193 LOC). This is a *minimal* subset sufficient for discovery
-   submessages — do not conflate it with Tier 3's general-purpose XCDR1 `cdr` library
-   for arbitrary IDL-defined user payload types; go-DDS keeps these as two separate
-   packages (`rtps/cdr.go` vs. top-level `cdr/`) and cpp-DDS should too.
+2. [x] **Discovery-scoped CDR/PL_CDR encoding** — little-endian only (the de-facto
+   standard for modern RTPS), used to encode/decode SPDP/SEDP parameter lists
+   (§10.2–§10.3). Reference: `cdr.go` (193 LOC). This is a *minimal* subset sufficient
+   for discovery submessages — do not conflate it with Tier 3's general-purpose XCDR1
+   `cdr` library for arbitrary IDL-defined user payload types; go-DDS keeps these as two
+   separate packages (`rtps/cdr.go` vs. top-level `cdr/`) and cpp-DDS should too.
+   **Done:** `include/dds/rtps/cdr.hpp` + `src/rtps/cdr.cpp` (`PLCDREncoder`/
+   `PLCDRDecoder` plus the `cdr_wrap_payload`/`cdr_unwrap_payload` CDR_LE encapsulation
+   helpers ported from `message.go`), verified byte-for-byte against go-DDS reference
+   vectors in `tests/test_rtps_cdr.cpp`. Internal to `cppdds_lib`, under `dds/rtps/` —
+   not yet wired into `dds::IParticipant`/`relay::INode` or consumed by SPDP/SEDP
+   (later phases).
 3. **UDP transport** — socket send/recv, the RTPS 2.3 §9.6.1 port-assignment formula
    (`metaMulticast(domain) = 7400 + 250*domain`, `metaUnicast/dataUnicast` offsets),
    multicast group `239.255.0.1`, platform-specific socket tuning (go-DDS splits this

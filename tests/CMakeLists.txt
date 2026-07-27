@@ -3,6 +3,7 @@ add_executable(cppdds_tests
     test_dds.cpp
     test_mock.cpp
     test_rtps_types.cpp
+    test_rtps_cdr.cpp
 )
 
 target_link_libraries(cppdds_tests
