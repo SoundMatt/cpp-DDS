@@ -4,6 +4,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #include <dds/mock/participant.hpp>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <mutex>

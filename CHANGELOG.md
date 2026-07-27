@@ -6,6 +6,50 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.7.0] — 2026-07-27
+
+### Added
+
+- RTPS Tier-1 sub-phase 5 (see `ROADMAP.md`, "Tier 1 — RTPS wire protocol",
+  phase 5 "SEDP"): `dds::rtps::SedpService` under `include/dds/rtps/sedp.hpp`
+  + `src/rtps/sedp.cpp` — local writer/reader registration with event-driven
+  unicast publication/subscription announcement to every known participant's
+  meta-unicast port, a receive thread, and remote-endpoint tables that
+  topic-name match incoming announcements against local endpoints. Also the
+  standalone `build_endpoint_data`/`parse_endpoint_data` (PL_CDR_LE
+  `EndpointData` encode/decode) and `build_sedp_announcement` (RTPS message
+  framing shared by publication and subscription announcements) functions,
+  independently testable without a running service.
+- `on_new_peer`/`on_peer_evicted` hooks so a later phase can wire
+  `SpdpService`'s known-peers table into `SedpService` without either class
+  holding a live reference to the other, plus `matched_writer_guids_for_reader`/
+  `writer_locator`/`reader_locator` query methods for phase 6's reader/writer
+  wiring to consume.
+- Every wire-format path verified byte-for-byte against reference vectors
+  produced by calling go-DDS's actual (unexported)
+  `sedpService.buildEndpointData`/`marshalDataSubmessage`/`wrapInRTPSMessage`
+  functions directly (`tests/test_rtps_sedp.cpp` documents the exact
+  reproduction steps), plus behavioral tests (self-announcement filtering,
+  topic matching in both discovery orders, remote locator tracking, peer
+  eviction purge) and a live two-`SedpService` unicast convergence test.
+  Verified locally with Release C++17/C++20 builds and a Debug ASan+UBSan
+  pass on macOS/AppleClang; CI additionally exercises Linux/gcc-12
+  ASan+UBSan.
+- Internal, additive scaffolding within `cppdds_lib`, under `dds/rtps/` —
+  not yet wired into the public `dds::IParticipant` / `relay::INode`
+  surface. Deliberately scoped down from a full port of go-DDS's
+  `sedpService` (a method set on the not-yet-ported `participant` type,
+  phase 6) — see `sedp.hpp`'s file-level scope note for the specific
+  deviations.
+
+### Fixed
+
+- `src/mock/participant.cpp` was missing `#include <algorithm>` for
+  `std::remove_if`, relying on a transitive include that not every
+  standard library provides — added explicitly.
+
+---
+
 ## [0.6.0] — 2026-07-27
 
 ### Added

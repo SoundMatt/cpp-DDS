@@ -160,10 +160,32 @@ buildable and testable against go-DDS's file of the same concern):
    authentication-token exchange are deliberately omitted — see spdp.hpp's
    file-level scope note. Internal to `cppdds_lib`, under `dds/rtps/` — not yet
    wired into `dds::IParticipant`/`relay::INode` or consumed by SEDP (phase 5, next).
-5. **SEDP** — Simple Endpoint Discovery Protocol (§8.5.4/§9.6.2): per-endpoint
+5. [x] **SEDP** — Simple Endpoint Discovery Protocol (§8.5.4/§9.6.2): per-endpoint
    publication/subscription announcement sent unicast to every known participant's
    meta-unicast port; incoming announcements are topic-name matched against local
-   endpoints to link readers to writers. Reference: `sedp.go` (343 LOC).
+   endpoints to link readers to writers. Reference: `sedp.go` (343 LOC). **Done
+   (v0.7.0):** `include/dds/rtps/sedp.hpp` + `src/rtps/sedp.cpp` (`SedpService`:
+   local writer/reader registration and event-driven unicast announcement, a
+   receive thread over `rtps::UdpSocket`, remote-endpoint tables keyed by `GUID`
+   with topic-name matching, `on_new_peer`/`on_peer_evicted` hooks fed by SPDP's
+   known-peers table) plus standalone `build_endpoint_data`/`parse_endpoint_data`
+   (PL_CDR_LE `EndpointData` encode/decode) and `build_sedp_announcement` (RTPS
+   message framing shared by publication and subscription announcements).
+   Verified byte-for-byte against go-DDS reference vectors (calling go-DDS's
+   actual `buildEndpointData`/`marshalDataSubmessage`/`wrapInRTPSMessage`
+   functions directly) plus behavioral tests (self-announcement filtering, topic
+   matching in both discovery orders, remote reader/writer locator tracking,
+   peer eviction purge, a live two-`SedpService` unicast convergence test) in
+   `tests/test_rtps_sedp.cpp`; verified locally with Release C++17/C++20 builds
+   and a Debug ASan/UBSan pass on macOS/AppleClang, 195/195 tests. Scoped down
+   from a full port of go-DDS's `sedpService` (a method on the not-yet-ported
+   `participant` type, phase 6): rather than a live reference to `SpdpService`
+   or a not-yet-existing `rtpsReader` type, this phase maintains its own
+   known-peers table (fed by explicit `on_new_peer`/`on_peer_evicted` calls) and
+   exposes matched-writer/locator query methods for phase 6 to consume — see
+   sedp.hpp's file-level scope note. Internal to `cppdds_lib`, under
+   `dds/rtps/` — not yet wired into `dds::IParticipant`/`relay::INode` or
+   consumed by entities (phase 6, next).
 6. **Entities & history cache** — participant/writer/reader entity lifecycle and the
    per-endpoint HistoryCache that everything else plugs into. This is go-DDS's single
    largest file by far (`participant.go`, 1,505 LOC — more than a third of the whole
