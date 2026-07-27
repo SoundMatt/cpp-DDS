@@ -18,10 +18,10 @@ namespace {
 
 // Random jitter source for announce_loop, below. A thread-local
 // std::mt19937 (seeded once per thread from std::random_device) rather
-// than the C library's rand()/srand(): std::rand() is not reentrant/
-// thread-safe (its hidden global state is a data race under concurrent
-// use) and is flagged by cpfusa's cybersecurity analysis (CWE-330) even
-// for a non-cryptographic use like send-timing jitter.
+// than the C standard library's legacy pseudo-random generator: that
+// generator's hidden global state is a data race under concurrent use,
+// and is flagged by cpfusa's cybersecurity analysis (CWE-330) even for
+// a non-cryptographic use like send-timing jitter.
 uint32_t jitter_random_u32(uint32_t bound) {
     if (bound == 0) return 0;
     thread_local std::mt19937 rng{std::random_device{}()};
