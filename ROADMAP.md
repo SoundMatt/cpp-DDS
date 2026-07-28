@@ -456,6 +456,42 @@ different kind of testing infrastructure entirely:
   (once it exists). Land cpp-DDS ⇄ go-DDS first — both are RELAY-authored, so protocol
   mismatches are debuggable from either side.
 
+- [x] **Done (v0.11.0):** the CycloneDDS-peer harness — go-DDS's own first interop
+  target and reference pattern — is built, under a new `interop/` directory:
+  `interop/test_interop.cpp` brings up a real (non-`test_mode`, real-multicast) `dds::
+  rtps::Participant` and exercises three directions against a live CycloneDDS peer
+  (cpp-DDS publisher → CycloneDDS subscriber, CycloneDDS publisher → cpp-DDS
+  subscriber, and a full bidirectional echo), skipping — not failing — when no peer
+  container answers within `INTEROP_TIMEOUT`, since a missing peer is a setup problem,
+  not a wire-compatibility regression. `interop/docker-compose.yml` brings up the
+  CycloneDDS peer (`cyclone-peer`, plus single-direction `cyclone-sub`/`cyclone-pub`
+  profile services), same shape as go-DDS's own `interop/docker-compose.yml`
+  (`network_mode: host` for real SPDP/SEDP multicast, `ddsperf`-driven CycloneDDS
+  containers). A new `CPPDDS_INTEROP_TESTS` CMake option (default `OFF`) is the
+  CMake/CTest equivalent of go-DDS's `go:build interop` tag: with it off — the default
+  for every normal build, including the CI `build-and-test` matrix — this directory's
+  tests are never compiled, linked, or registered with CTest at all, not merely
+  filtered out afterward; the resulting `cppdds_interop_tests` target additionally
+  tags every test with the CTest label `interop` (`ctest -L interop` /
+  `ctest -LE interop`) and `SKIP_RETURN_CODE 4` (Catch2's own "every test case was
+  skipped" exit code), so CTest reports genuinely-skipped runs as "Not Run" rather
+  than "Failed". `INTEROP_DOMAIN`/`INTEROP_TIMEOUT` environment variables match
+  go-DDS's own convention exactly. A new opt-in `test-interop` CI job builds with
+  `-DCPPDDS_INTEROP_TESTS=ON`, brings up the `cyclone-peer` service, and runs
+  `ctest -L interop` — probe-gated to skip (green) rather than fail if the CycloneDDS
+  Docker image is unavailable in the runner's registry, and deliberately not a
+  `needs:` dependency of, or depended on by, any other job, mirroring go-DDS's own
+  `test-interop` job exactly. `interop/README.md` documents prerequisites and the
+  local quick-start. Verified locally: default (`CPPDDS_INTEROP_TESTS=OFF`) Release
+  C++17/C++20 builds are unaffected (264/264 existing tests still pass, zero new
+  build artifacts); with the option on, the new suite builds warning-clean under a
+  genuine `-std=c++20` invocation and passes (1 real pass + 2 correctly-reported
+  skips with no live peer) under both a plain build and a Debug ASan+UBSan pass;
+  CI's `test-interop` job additionally exercises this against a genuine CycloneDDS
+  container on Linux. The go-DDS-peer and rust-DDS-peer legs of the 3-way matrix
+  above remain open — this item covers the CycloneDDS leg and the harness
+  infrastructure itself.
+
 ---
 
 ## Future (outside the 5-tier priority order)

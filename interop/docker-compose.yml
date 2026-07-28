@@ -1,0 +1,59 @@
+# Interop test environment: cpp-DDS (host) <-> CycloneDDS (container)
+#
+# Usage:
+#   docker compose -f interop/docker-compose.yml up -d cyclone-peer
+#   cmake -B build-interop -DCPPDDS_INTEROP_TESTS=ON -G Ninja
+#   cmake --build build-interop --parallel
+#   ctest --test-dir build-interop -L interop --output-on-failure
+#   docker compose -f interop/docker-compose.yml down
+#
+# Mirrors go-DDS's own interop/docker-compose.yml pattern exactly (topic
+# names substitute cpp-dds-ping/-pong for go-dds-ping/-pong so the two
+# implementations' interop harnesses can run against the same CycloneDDS
+# image without colliding on topic names if ever run side by side) — see
+# github.com/SoundMatt/go-DDS/interop/docker-compose.yml.
+#
+# network_mode: host shares the host network stack so RTPS SPDP/SEDP
+# multicast (see include/dds/rtps/transport.hpp's meta_multicast_port /
+# kSpdpMulticastGroup) actually reaches the container — a bridge network
+# would need static-peer configuration instead, which CycloneDDS's ddsperf
+# doesn't expose as conveniently as go-DDS's own DDS_PEERS docker setup
+# (see docker-compose.host.yml's precedent in go-DDS's own quickstart repo).
+# host networking is Linux-only, matching CI's ubuntu-22.04 runner.
+
+services:
+  # CycloneDDS peer — publishes and subscribes on the DDS domain, exercising
+  # both directions of the wire against a real cpp-DDS Participant. This is
+  # the service the "bidirectional echo" interop test expects.
+  cyclone-peer:
+    image: eclipse-cyclonedds/cyclonedds:latest
+    network_mode: host
+    environment:
+      - DDS_DOMAIN=0
+    command: >
+      sh -c "
+        ddsperf -D 0 pub T:interop/cpp-dds-ping Qos:r:1k:e:1 z:8 n:10 &
+        ddsperf -D 0 sub T:interop/cpp-dds-pong Qos:r:1k:e:1 &
+        wait
+      "
+    restart: unless-stopped
+
+  # Minimal CycloneDDS subscriber that receives from the cpp-DDS publisher.
+  # Used by the "cpp-DDS publisher reaches a live CycloneDDS subscriber" test.
+  cyclone-sub:
+    image: eclipse-cyclonedds/cyclonedds:latest
+    network_mode: host
+    environment:
+      - DDS_DOMAIN=0
+    command: ddsperf -D 0 sub T:interop/cpp-dds-ping Qos:r:1k:e:1 -n 5
+    profiles: [sub]
+
+  # Minimal CycloneDDS publisher for the "cpp-DDS subscriber receives from a
+  # live CycloneDDS publisher" test.
+  cyclone-pub:
+    image: eclipse-cyclonedds/cyclonedds:latest
+    network_mode: host
+    environment:
+      - DDS_DOMAIN=0
+    command: ddsperf -D 0 pub T:interop/cpp-dds-pong Qos:r:1k:e:1 z:16 n:10
+    profiles: [pub]
