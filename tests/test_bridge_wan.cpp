@@ -548,8 +548,13 @@ TEST_CASE("Bridge::connect: second-of-two subscriptions failing cleans up the fi
 
 TEST_CASE("Bridge::serve: oversized frame header is rejected and the connection is dropped",
           "[bridge][wan][REQ-BRIDGE-WAN-002][REQ-BRIDGE-WAN-005]") {
-    auto p           = make_participant();
-    auto [srv, port] = must_serve(p);
+    auto p             = make_participant();
+    auto srv_port_pair = must_serve(p);
+    // Not a structured binding: `srv` is captured by reference in the
+    // lambda below, and clang (unlike gcc) correctly rejects capturing a
+    // structured-binding name in C++17 (only C++20 permits it).
+    std::shared_ptr<bwan::Bridge> srv  = srv_port_pair.first;
+    uint16_t                      port = srv_port_pair.second;
 
     RawSocket conn = raw_dial("127.0.0.1", port);
     REQUIRE(conn >= 0);
@@ -716,8 +721,11 @@ TEST_CASE("Bridge: client write failure after server closes stops the sender wit
     auto [srv, sport] = must_serve(dst);
     (void)sport;
 
-    auto [cli, cec] = bwan::Bridge::connect(src, srv->addr(), bwan::Options{{topic}, dds::default_qos(), ""});
-    REQUIRE_FALSE(cec);
+    auto cli_ec_pair = bwan::Bridge::connect(src, srv->addr(), bwan::Options{{topic}, dds::default_qos(), ""});
+    REQUIRE_FALSE(cli_ec_pair.second);
+    // Not a structured binding: `cli` is captured by reference in the
+    // lambda below (see the sibling fix above for why clang requires this).
+    std::shared_ptr<bwan::Bridge> cli = cli_ec_pair.first;
 
     auto [pub, pec] = src->new_publisher(topic, dds::default_qos());
     REQUIRE_FALSE(pec);
