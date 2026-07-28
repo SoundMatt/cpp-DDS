@@ -6,6 +6,38 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.24.0] — 2026-07-28
+
+### Added
+
+- `dds::bridge::wan` (`include/dds/bridge/wan/wan.hpp`, `src/bridge/wan/
+  wan.cpp`) — a WAN bridge forwarding DDS samples between two
+  `dds::IParticipant` domains over a real TCP connection, the second item of
+  `ROADMAP.md`'s "Tier 4 — bridges" and a C++ port of go-DDS's `bridge/wan`
+  package. Landed as a second member of `cppdds_bridges`. `Bridge::serve`
+  accepts TCP connections and publishes received samples to a local
+  participant (a fresh per-connection publisher cache, matching go's
+  per-call `receiveLoop` exactly); `Bridge::connect` synchronously subscribes
+  to `Options::topics` before dialing (with cleanup-on-partial-failure) and
+  streams each topic's samples to the server from an independent per-topic
+  sender thread. Wire format is byte-exact with go's `encoding/json.Marshal`
+  output for the unexported `wireFrame` struct (a 4-byte big-endian length
+  prefix, capped at 16 MiB, followed by `{"t":"<topic>","p":"<base64-
+  payload>"}`), verified against reference vectors captured from a real
+  go-DDS process. Per this baseline's explicit scope (see `wan.hpp`'s
+  file-level scope note), the shared-token auth path is included alongside
+  the framing it depends on (`Options::token`, `write_auth`/`read_auth`,
+  constant-time server-side comparison, silent connection drop on
+  mismatch); a real TLS/mTLS transport remains the explicitly-deferred
+  stretch item. Also adds `dds::mock::create`'s `isolated_broker` parameter
+  (`REQ-MOCK-006`, additive, default `false`) — a C++ port of go-DDS's
+  `mock.IsolatedBroker()`, needed to test two same-process participants
+  standing in for two separate DDS domains without one echoing directly to
+  the other. Verified with 34 new tests (`tests/test_bridge_wan.cpp`) plus 2
+  new `dds::mock` tests — 617/617 tests total. `REQ-BRIDGE-WAN-001` through
+  `REQ-BRIDGE-WAN-007` and `REQ-MOCK-006` added, traced and tested.
+  `ROADMAP.md`'s `wan` bullet checked off (`rest` remains open).
+
 ## [0.23.0] — 2026-07-28
 
 ### Added

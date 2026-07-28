@@ -311,9 +311,16 @@ private:
 
 class MockParticipantImpl : public IMockParticipant {
 public:
-    explicit MockParticipantImpl(Domain domain)
+    // isolated_broker: C++ port of go-DDS's mock.IsolatedBroker() Option
+    // (see mock/participant.hpp's file-level comment). When true, this
+    // participant owns a private Broker instance instead of referencing
+    // the process-global singleton, so it shares no subscription state
+    // with any other participant (isolated or not).
+    // fusa:req REQ-MOCK-006
+    MockParticipantImpl(Domain domain, bool isolated_broker)
         : domain_(domain)
-        , broker_(Broker::instance())
+        , owned_broker_(isolated_broker ? std::make_unique<Broker>() : nullptr)
+        , broker_(owned_broker_ ? *owned_broker_ : Broker::instance())
         , ctrs_(std::make_shared<ParticipantCounters>())
     {}
 
@@ -493,6 +500,7 @@ private:
     }
 
     Domain                                       domain_;
+    std::unique_ptr<Broker>                      owned_broker_; // non-null only when isolated
     Broker&                                      broker_;
     std::shared_ptr<ParticipantCounters>         ctrs_;
     std::atomic<bool>                            closed_{false};
@@ -508,11 +516,11 @@ private:
 // ── Factory ───────────────────────────────────────────────────────────────────
 
 std::pair<std::shared_ptr<IMockParticipant>, std::error_code>
-create(Domain domain) {
+create(Domain domain, bool isolated_broker) {
     if (auto ec = validate_domain(domain); ec)
         return {nullptr, ec};
 
-    return {std::make_shared<MockParticipantImpl>(domain), {}};
+    return {std::make_shared<MockParticipantImpl>(domain, isolated_broker), {}};
 }
 
 // ── Loan integration (mock side; "Also within ddscore but not RTPS-

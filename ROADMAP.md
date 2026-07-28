@@ -897,8 +897,48 @@ inventing a bridge spec ahead of the reference implementation.
   total, verified locally with Release C++17/C++20 builds and a Debug ASan+UBSan pass
   (clang, macOS) with zero new warnings under `-Wall -Wextra -Wpedantic`. `REQ-BRIDGE-
   GRPC-001` through `REQ-BRIDGE-GRPC-011` added, traced and tested.
-- [ ] **`wan`** — WAN bridge (go-DDS `bridge/wan`). Baseline scope (TLS deep dive is
-  Tier 4's explicitly-deferred stretch item, see "Future" below).
+- [x] **`wan`** — WAN bridge (go-DDS `bridge/wan`). Baseline scope (TLS deep dive is
+  Tier 4's explicitly-deferred stretch item, see "Future" below). Done (v0.24.0):
+  `dds::bridge::wan::Bridge`, a second member of `cppdds_bridges`, ported one-for-one
+  from `wan.go` — `Bridge::serve` accepts TCP connections and publishes received
+  samples to a local `dds::IParticipant`, with a fresh per-connection publisher cache
+  (mirroring go's per-call `receiveLoop` map exactly); `Bridge::connect` synchronously
+  subscribes to `Options::topics` before dialing (closing every already-created
+  subscription on a partial failure, matching `Connect`'s cleanup order exactly) and
+  streams each topic's samples to the server from an independent per-topic sender
+  thread. Wire format is byte-exact with go's `encoding/json.Marshal` output for the
+  unexported `wireFrame` struct — a 4-byte big-endian length prefix (capped at 16 MiB,
+  `ErrFrameTooLarge`) followed by `{"t":"<topic>","p":"<base64-payload>"}` — verified
+  against reference vectors captured from a real go-DDS process (a throwaway `go test`
+  program against a fresh clone, `github.com/SoundMatt/go-DDS` v0.63.0, since
+  `wireFrame` is unexported). Per the roadmap's own scope note, the shared-token auth
+  path is in scope alongside the framing it depends on: `Options::token`, when set, is
+  sent as the client's first frame (`write_auth`/`read_auth`, capped at 4096 bytes) and
+  constant-time compared server-side (mirroring `crypto/subtle.ConstantTimeCompare`
+  exactly, including its own documented immediate-`false`-on-length-mismatch behavior),
+  silently dropping the connection on a mismatch; a real TLS/mTLS transport remains the
+  explicitly-deferred stretch item (see "Future" below). Per-topic sample fan-out uses
+  one sender thread per topic polling `recv_until` on a short deadline rather than a
+  native multi-channel select (`relay::Channel<T>` has none — the same pattern already
+  established by `dds::bridge::grpc::Bridge::subscribe`), with a write failure on any
+  sender closing every topic's subscriber to unblock the others, mirroring go's
+  `closeAllSubs()`. Testing two independently-addressable participants in one process
+  (the client's local domain and the server's local domain) surfaced a real conformance
+  gap versus go-DDS's `mock` package: `dds::mock::create` had no equivalent of
+  `mock.IsolatedBroker()`, so a same-process client/server pair sharing the global mock
+  broker would echo samples directly between them, bypassing the bridge under test
+  entirely (exactly the race go-DDS's own doc comment warns about) — fixed by adding
+  `dds::mock::create`'s own `isolated_broker` parameter (`REQ-MOCK-006`, additive/
+  default-`false`, every existing call site unaffected), verified by its own
+  `TestIsolatedBroker_NoEcho`-equivalent test. Verified with 34 new tests
+  (`tests/test_bridge_wan.cpp`) — byte-exact JSON reference-vector tests, an
+  internal-test-style frame/auth codec suite against in-memory `WriteFn`/`ReadFn`
+  doubles (mirroring `wan_internal_test.go`), and real loopback-TCP end-to-end tests
+  covering forwarding (single- and multi-topic), auth accept/reject, oversized-frame and
+  malformed-JSON rejection, topic filtering, and cleanup-on-partial-failure — 617/617
+  tests total, verified locally with Release C++17/C++20 builds and a Debug ASan+UBSan
+  pass (gcc 16, macOS) clean. `REQ-BRIDGE-WAN-001` through `REQ-BRIDGE-WAN-007` and
+  `REQ-MOCK-006` added, traced and tested.
 - [ ] **`rest`** — REST bridge (go-DDS `bridge/rest`).
 
 ## Tier 5 — observability (v0.6.0)

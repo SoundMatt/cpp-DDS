@@ -143,6 +143,16 @@
     "criticality": "high"
   },
   {
+    "id": "REQ-MOCK-006",
+    "title": "Mock isolated broker option",
+    "text": "dds::mock::create(domain, isolated_broker) shall, when isolated_broker is true, give the returned participant its own private Broker instance that shares no subscription or transient-local state with the process-global Broker or with any other participant (isolated or not), matching go-DDS mock.IsolatedBroker(); the default (false) preserves the existing shared process-global Broker behavior for every prior create() call site.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS mock/mock.go IsolatedBroker, mock.New"
+    ]
+  },
+  {
     "id": "REQ-METRICS-001",
     "title": "Write metrics tracking",
     "text": "The mock participant shall track write_count and bytes_written incremented atomically on each successful IPublisher::write() call.",
@@ -1042,6 +1052,76 @@
     "criticality": "medium",
     "standards": [
       "go-DDS bridge/grpc/config.go LoadConfig, ApplyConfig"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-WAN-001",
+    "title": "WAN bridge wire frame type and JSON codec",
+    "text": "The system shall define dds::bridge::wan::WireFrame{topic, payload} and to_json()/from_json() producing/accepting JSON byte-identical in field shape to go-DDS's encoding/json.Marshal output for its unexported wireFrame struct ({\"t\":\"<topic>\",\"p\":\"<base64-payload>\"}, standard padded base64 for the payload field), verified against reference vectors captured from a real go-DDS process; from_json shall accept both `null` and `\"\"` for an empty payload field and reject malformed JSON.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/wan/wan.go wireFrame, writeFrame, readFrame"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-WAN-002",
+    "title": "WAN bridge frame length-prefix and size cap",
+    "text": "write_frame()/read_frame() shall exchange a WireFrame as a 4-byte big-endian length prefix followed by its JSON body; read_frame() shall return ErrFrameTooLarge when the declared length exceeds 16 MiB, and ErrInvalidFrame when the body is not valid WireFrame JSON, without allocating a buffer for the oversized case.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/wan/wan.go maxFrameBytes, ErrFrameTooLarge, writeFrame, readFrame"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-WAN-003",
+    "title": "WAN bridge Options",
+    "text": "The system shall define dds::bridge::wan::Options{topics, qos, token}: topics lists the DDS topic names a client Bridge (Bridge::connect) forwards (server Bridges publish any topic they receive and do not filter); qos defaults to dds::default_qos() and is applied to every bridged DDS endpoint; token, when non-empty, enables shared-secret authentication as described by REQ-BRIDGE-WAN-004.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS bridge/wan/wan.go Options"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-WAN-004",
+    "title": "WAN bridge shared-token auth handshake",
+    "text": "write_auth()/read_auth() shall exchange a 4-byte big-endian length prefix (capped at 4096 bytes, returning ErrFrameTooLarge above the cap) followed by the raw token bytes. When Options::token is non-empty, Bridge::connect shall send it as the first frame on the new connection before returning, and Bridge::serve shall read and constant-time-compare it before accepting any data frame on that connection, silently closing the connection on a mismatch (matching go-DDS's crypto/subtle.ConstantTimeCompare-based check and its ErrUnauthorized semantics). Auth is skipped entirely when Options::token is empty.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/wan/wan.go maxTokenBytes, ErrUnauthorized, writeAuth, readAuth, crypto/subtle.ConstantTimeCompare"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-WAN-005",
+    "title": "WAN bridge server (Bridge::serve)",
+    "text": "Bridge::serve shall bind a TCP listener on the given \"host:port\" address (port 0 selecting an OS-assigned port) and, for each accepted connection independently, run the optional auth handshake then read frames until a transport error, an oversized or malformed frame, or a publisher error, lazily resolving or creating (and caching, per-connection) a dds::IPublisher for each frame's topic and writing its payload; the connection and its cached publishers are closed when the loop ends for any reason.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/wan/wan.go Serve, receiveLoop"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-WAN-006",
+    "title": "WAN bridge client (Bridge::connect)",
+    "text": "Bridge::connect shall synchronously create a dds::ISubscriber for every Options::topics entry before dialing, closing every already-created subscriber and returning the error if any subscription or the dial fails; after a successful dial it shall run the optional auth handshake, then stream each topic's received samples to the server as wire frames from an independent per-topic sender, serializing writes onto the single connection; a write failure on any sender shall close every topic's subscriber, unblocking the others.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/wan/wan.go Connect, sendLoop"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-WAN-007",
+    "title": "WAN bridge close and addr semantics",
+    "text": "Bridge::close() shall stop accepting/sending, force-close every tracked connection, and join every worker thread before returning; it shall be idempotent and is also invoked by the destructor. Bridge::addr() shall return the server's bound \"host:port\" listen address for a Bridge created by Bridge::serve, and an empty string for a Bridge created by Bridge::connect.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS bridge/wan/wan.go Bridge.Close, Bridge.Addr"
     ]
   }
 ]

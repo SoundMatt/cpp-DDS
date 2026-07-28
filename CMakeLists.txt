@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(cppdds
-    VERSION 0.23.0
+    VERSION 0.24.0
     DESCRIPTION "C++ DDS library — RELAY-conformant"
     HOMEPAGE_URL "https://github.com/SoundMatt/cpp-DDS"
     LANGUAGES CXX
@@ -115,6 +115,7 @@ if(CPPDDS_BUILD_BRIDGES)
         src/bridge/grpc/grpc.cpp
         src/bridge/grpc/transport.cpp
         src/bridge/grpc/config.cpp
+        src/bridge/wan/wan.cpp
     )
     target_include_directories(cppdds_bridges
         PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include

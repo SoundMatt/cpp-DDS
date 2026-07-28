@@ -4,6 +4,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 // fusa:test REQ-MOCK-001 REQ-MOCK-002 REQ-MOCK-003 REQ-MOCK-004 REQ-MOCK-005
+// fusa:test REQ-MOCK-006
 // fusa:test REQ-DDS-005 REQ-DDS-006 REQ-DDS-007 REQ-DDS-009
 // fusa:test REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003
 // fusa:test REQ-METRICS-004 REQ-METRICS-005 REQ-METRICS-006
@@ -771,4 +772,54 @@ TEST_CASE("IMockParticipant implements all optional capability interfaces", "[mo
     CHECK(dynamic_cast<dds::mock::IMockParticipant*>(mp) != nullptr);
     CHECK(dynamic_cast<dds::mock::IMockParticipant*>(hp) != nullptr);
     CHECK(dynamic_cast<dds::mock::IMockParticipant*>(dr) != nullptr);
+}
+
+// ── Isolated broker (REQ-MOCK-006) ────────────────────────────────────────────
+//
+// C++ port of go-DDS's mock_test.go TestIsolatedBroker_NoEcho.
+
+TEST_CASE("isolated broker: publish on one participant does not echo to another", "[mock][REQ-MOCK-006]") {
+    auto [p1, ec1] = dds::mock::create(0, /*isolated_broker=*/true);
+    REQUIRE_FALSE(ec1);
+    auto [p2, ec2] = dds::mock::create(0, /*isolated_broker=*/true);
+    REQUIRE_FALSE(ec2);
+
+    auto [sub1, sec] = p1->new_subscriber("isolated/topic", dds::default_qos());
+    REQUIRE_FALSE(sec);
+    auto [pub2, pec] = p2->new_publisher("isolated/topic", dds::default_qos());
+    REQUIRE_FALSE(pec);
+
+    CHECK_FALSE(pub2->write({'f', 'r', 'o', 'm', '-', 'p', '2'}));
+
+    auto item = sub1->channel()->recv_until(std::chrono::steady_clock::now() + 50ms);
+    CHECK_FALSE(item.has_value()); // isolated brokers don't share state
+
+    pub2->close();
+    sub1->close();
+    p1->close();
+    p2->close();
+}
+
+TEST_CASE("isolated broker: default (non-isolated) participants still share the global broker",
+          "[mock][REQ-MOCK-006]") {
+    auto [p1, ec1] = dds::mock::create(0);
+    REQUIRE_FALSE(ec1);
+    auto [p2, ec2] = dds::mock::create(0);
+    REQUIRE_FALSE(ec2);
+
+    auto [sub1, sec] = p1->new_subscriber("shared/topic/req-mock-006", dds::default_qos());
+    REQUIRE_FALSE(sec);
+    auto [pub2, pec] = p2->new_publisher("shared/topic/req-mock-006", dds::default_qos());
+    REQUIRE_FALSE(pec);
+
+    CHECK_FALSE(pub2->write({'h', 'i'}));
+
+    auto item = sub1->channel()->recv_until(std::chrono::steady_clock::now() + 500ms);
+    REQUIRE(item.has_value());
+    CHECK(std::string(item->payload.begin(), item->payload.end()) == "hi");
+
+    pub2->close();
+    sub1->close();
+    p1->close();
+    p2->close();
 }
