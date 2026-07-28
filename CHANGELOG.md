@@ -6,6 +6,35 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.23.0] — 2026-07-28
+
+### Added
+
+- `dds::bridge::grpc` (`include/dds/bridge/grpc/{grpc.hpp,transport.hpp,
+  config.hpp}`, `src/bridge/grpc/{grpc.cpp,transport.cpp,config.cpp}`) — a gRPC
+  gateway bridging a `dds::IParticipant` to RPC clients over JSON-encoded
+  messages, the first item of `ROADMAP.md`'s "Tier 4 — bridges" and a C++ port
+  of go-DDS's `bridge/grpc` package. Landed as the first member of a new
+  `cppdds_bridges` CMake target (`CPPDDS_BUILD_BRIDGES`, default `ON`) — the
+  first concrete piece of the previously-proposed `ddsbridges` target group;
+  `cppdds_lib` itself is untouched. `SubscribeRequest`/`PublishRequest`/
+  `Sample`/`PublishAck` and their JSON codec are byte-exact with go-DDS's
+  `encoding/json.Marshal` output, verified against reference vectors captured
+  from a real go-DDS process. `Bridge` implements the three RPCs
+  (`subscribe`/`publish`/`stream_publish`) as plain C++ methods against
+  `SampleSender`/`PublishReceiver` abstractions, independent of any
+  networking, plus lazy subscriber/publisher caching, `Options`
+  (`auth_token`/`qos`/`filter`/`transform`), and `check_auth()`.
+  `transport.hpp`'s `Server`/`Client` speak a real, working TCP wire protocol
+  (a text header block plus real gRPC length-prefixed-message framing)
+  rather than a full HTTP/2 gRPC transport — this repo has no HTTP/2 or
+  protobuf dependency anywhere — documented in full in `grpc.hpp`'s
+  file-level scope note. `config.hpp`/`config.cpp` hand-roll a minimal
+  YAML-subset parser for the bridge's `listen`/`auth_token`/`topics` schema.
+  Verified with 41 new tests (`tests/test_bridge_grpc.cpp`) — 581/581 tests
+  total. `REQ-BRIDGE-GRPC-001` through `REQ-BRIDGE-GRPC-011` added, traced and
+  tested. `ROADMAP.md`'s `grpc` bullet checked off (`wan`/`rest` remain open).
+
 ## [0.22.0] — 2026-07-28
 
 ### Added

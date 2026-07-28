@@ -932,5 +932,116 @@
       "go-DDS tsn/taprio_linux.go, tsn/taprio_stub.go",
       "Linux RTM_NEWQDISC/RTM_GETQDISC over NETLINK_ROUTE"
     ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-001",
+    "title": "gRPC bridge message types",
+    "text": "The system shall define dds::bridge::grpc::SubscribeRequest (topic), PublishRequest (topic, payload), Sample (topic, payload, sequence_number, timestamp_ns, writer_guid), and PublishAck (count), matching go-DDS bridge/grpc's SubscribeRequest/PublishRequest/Sample/PublishAck field-for-field.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS bridge/grpc/grpc.go message types"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-002",
+    "title": "gRPC bridge JSON codec",
+    "text": "The system shall provide to_json()/from_json() for SubscribeRequest, PublishRequest, Sample, and PublishAck producing/accepting JSON byte-identical in field shape to go-DDS's encoding/json.Marshal output (object key order, HTML-safe string escaping for '<','>','&', standard padded base64 for byte fields), verified against reference vectors captured from a real go-DDS process; from_json shall accept both `null` and `\"\"` for empty byte fields and reject malformed JSON.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/grpc/grpc.go JSONCodec",
+      "Go encoding/json default escapeHTML=true"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-003",
+    "title": "gRPC bridge Status/StatusCode",
+    "text": "The system shall define dds::bridge::grpc::StatusCode with numeric values matching google.golang.org/grpc/codes exactly (OK=0, Cancelled=1, InvalidArgument=3, Internal=13, Unauthenticated=16) and a Status{code,message} type used as every Bridge RPC method's error/result channel.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "google.golang.org/grpc/codes"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-004",
+    "title": "Options: QoS, Filter, Transform",
+    "text": "The system shall define dds::bridge::grpc::Options{auth_token, qos, filter, transform}; Bridge::subscribe shall drop a sample when filter is set and returns false, and shall rewrite (or drop, on std::nullopt) a sample's payload via transform before delivery, matching go-DDS bridge/grpc's FilterFunc/TransformFunc semantics.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS bridge/grpc/grpc.go Options, FilterFunc, TransformFunc"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-005",
+    "title": "Bridge auth, close",
+    "text": "Bridge::check_auth shall return Status::make_ok() when Options::auth_token is empty, and otherwise return an Unauthenticated Status unless the supplied authorization value equals \"Bearer \" + auth_token; Bridge::close() shall close every cached subscriber/publisher and shall be idempotent (a second close() is a no-op returning an OK error_code).",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/grpc/grpc.go checkAuth, Bridge.Close"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-006",
+    "title": "Bridge Publish and StreamPublish RPC semantics",
+    "text": "Bridge::publish shall return InvalidArgument for an empty topic, resolve or lazily create a cached dds::IPublisher for the topic, write the payload, and return PublishAck{1} on success or an Internal Status on a write failure. Bridge::stream_publish shall read PublishRequest values from a PublishReceiver until a clean end-of-stream, writing each to its (cached) publisher, and return PublishAck{count} of successful writes, or an InvalidArgument/Internal Status on the first empty-topic or write failure, or propagate a non-OK receiver error unchanged.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/grpc/grpc.go Bridge.Publish, Bridge.StreamPublish"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-007",
+    "title": "Bridge Subscribe RPC semantics",
+    "text": "Bridge::subscribe shall return InvalidArgument for an empty topic; otherwise it shall resolve or lazily create a cached dds::ISubscriber and, for each sample delivered on its channel (after filter/transform), invoke SampleSender::send, returning an Internal Status if send fails; it shall return Status::make_ok() once the subscriber's channel closes, and Status::cancelled() if SampleSender::cancelled() reports true before or between deliveries.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/grpc/grpc.go Bridge.Subscribe"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-008",
+    "title": "gRPC bridge TCP wire protocol (Server)",
+    "text": "dds::bridge::grpc::Server shall accept TCP connections on a configurable bind address/port (port 0 selects an OS-assigned port), parse a per-connection text header block (RPC method name plus an optional authorization header), enforce Bridge::check_auth before dispatching Publish/Subscribe/StreamPublish, and exchange message bodies as length-prefixed frames (1-byte flag + 4-byte big-endian length, matching real gRPC message framing) carrying this module's JSON codec; Server::stop() shall close the listening socket and join every in-flight connection handler, be idempotent, and cause any in-flight Subscribe call to observe SampleSender::cancelled().",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/grpc/grpc.go (RPC semantics); gRPC wire protocol length-prefixed-message framing"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-009",
+    "title": "gRPC bridge TCP wire protocol (Client)",
+    "text": "dds::bridge::grpc::Client shall connect to a host/port, send the RPC method name and optional bearer-token authorization header, and implement publish() (unary), subscribe() (server-streaming, invoking a caller callback per Sample until the server ends the stream or the callback returns false), and stream_publish() (client-streaming via StreamPublishCall::send()/close_and_recv(), half-closing the TCP write side to signal end-of-stream), using the same frame/header wire protocol as Server.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/grpc/grpc.go DDSBridgeClient, NewClient"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-010",
+    "title": "Bridge Config/TopicConfig schema",
+    "text": "The system shall define dds::bridge::grpc::Config{listen, auth_token, topics} and TopicConfig{name, qos}, with TopicConfig::effective_qos() mapping \"reliable\" to Reliable, \"best_effort\"/\"besteffort\" (case-insensitively) to BestEffort, and any other value to dds::default_qos(), matching go-DDS bridge/grpc's Config/TopicConfig YAML schema.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS bridge/grpc/config.go Config, TopicConfig"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-GRPC-011",
+    "title": "load_config and apply_config",
+    "text": "load_config(path) shall parse the YAML file at path into a Config, returning a LoadResult with `error` set (and `config` unset) on a missing file or malformed YAML for this module's supported subset (top-level scalar keys plus one block-form `topics:` list); apply_config(bridge, cfg) shall pre-subscribe every non-empty topic name in cfg.topics on the bridge's participant using its effective_qos(), returning the first subscription error encountered.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS bridge/grpc/config.go LoadConfig, ApplyConfig"
+    ]
   }
 ]
