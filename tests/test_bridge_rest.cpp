@@ -375,7 +375,7 @@ TEST_CASE("Bridge::list_topics: sorted after subscribing to several topics", "[b
     CHECK(bridge.list_topics() == std::vector<std::string>{"alpha", "mid", "zeta"});
 }
 
-TEST_CASE("Bridge::get_subscriber: caches — the same topic returns the same subscriber",
+TEST_CASE("Bridge::get_subscriber: caches - the same topic returns the same subscriber",
           "[bridge][rest][REQ-BRIDGE-REST-006]") {
     auto p = make_participant();
     brest::Bridge bridge(p, brest::Options{});
@@ -386,7 +386,7 @@ TEST_CASE("Bridge::get_subscriber: caches — the same topic returns the same su
     CHECK(sub1 == sub2);
 }
 
-TEST_CASE("Bridge::get_publisher: caches — the same topic returns the same publisher",
+TEST_CASE("Bridge::get_publisher: caches - the same topic returns the same publisher",
           "[bridge][rest][REQ-BRIDGE-REST-006]") {
     auto p = make_participant();
     brest::Bridge bridge(p, brest::Options{});
