@@ -670,9 +670,37 @@ it:
   ASan/UBSan pass on macOS/AppleClang; CI additionally exercises Linux/gcc-12
   ASan+UBSan. `REQ-XTYPE-001`..`006` and `REQ-TREG-001`..`003` added, traced
   and tested.
-- **`cdr`** — full XCDR1 encode/decode per OMG DDS-XTypes 1.3, for arbitrary
+- [x] **`cdr`** — full XCDR1 encode/decode per OMG DDS-XTypes 1.3, for arbitrary
   IDL-defined user payload types (go-DDS `cdr/`, 348 LOC incl. tests) — general-purpose,
   and deliberately separate from Tier 1's discovery-only CDR subset (see Tier 1 phase 2).
+  **Done (v0.20.0):** `include/dds/cdr/cdr.hpp` + `src/cdr/cdr.cpp` — a faithful C++
+  port of go-DDS's `tools/cdr/cdr.go`: `Encoder`/`Decoder` for all CDR primitives
+  (bool/int8/uint8/int16/uint16/int32/uint32/int64/uint64/float32/float64) with
+  natural alignment, strings (4-byte-aligned uint32 length + UTF-8 bytes + null
+  terminator), and byte sequences (4-byte-aligned uint32 count + raw bytes, no null
+  terminator). `Encoder` prepends and `Decoder::create()` validates the 4-byte CDR_LE
+  encapsulation header, accepting both the CDR_LE (0x0001) and CDR_BE (0x0000) scheme
+  values on decode while always decoding little-endian, matching go-DDS's own
+  `NewDecoder()` quirk exactly. Deliberately a SEPARATE library from Tier 1 phase 2's
+  discovery-scoped `dds::rtps::PLCDREncoder`/`PLCDRDecoder` — not reused, not extended;
+  go-DDS keeps `rtps/cdr.go` and top-level `tools/cdr/` as two independent packages and
+  cpp-DDS mirrors that split with this new top-level `dds/cdr/`. Every method verified
+  byte-exact against reference vectors independently derived from a fresh go-DDS clone
+  (calling go-DDS's actual exported `Encoder`/`Decoder` methods directly from a scratch
+  `_test.go` file, never committed upstream, per this repo's established white-box
+  vector-derivation convention). Verified with 45 new tests (`tests/test_cdr.cpp`) —
+  byte-exact reference-vector tests plus full behavioral parity with go-DDS's own
+  `cdr_test.go` matrix (primitive/string/bytes round trips, alignment, multi-field
+  struct simulation, encapsulation header acceptance/rejection, `Len`/`Remaining`
+  introspection, buffer-underrun detection on every typed read) — 443/443 tests total,
+  verified locally with a Release C++17 build (the new files additionally compiled
+  warning-clean under a genuine `-std=c++20` invocation directly, per phase 6's
+  precedent for this repo's C++20 CI-leg quirk) and a Debug ASan/UBSan pass on
+  macOS/AppleClang; CI additionally exercises Linux/gcc-12 ASan+UBSan. `REQ-CDR-001`
+  through `REQ-CDR-005` added, traced and tested. Landed as `include/dds/cdr/` +
+  `src/cdr/`, internal to `cppdds_lib` — no CMake target-splitting yet (per this
+  tier's own caveat, that happens once `ddstools`/`cppdds_tools` has multiple
+  packages to house, not before).
 - **`idl`** — OMG IDL parser plus a C++ code generator, exposed via a standalone
   `ddstool` CLI target under `cppdds_tools` (go-DDS `idl/`, 1,382 LOC, plus
   `cmd/ddstool`, part of `cmd`'s 1,462 LOC — go-DDS's single largest package outside

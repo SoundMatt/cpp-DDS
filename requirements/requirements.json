@@ -571,5 +571,45 @@
     "category": "functional",
     "criticality": "medium",
     "standards": ["go-DDS tools/xtypes/xtypes.go TypeRegistry.All"]
+  },
+  {
+    "id": "REQ-CDR-001",
+    "title": "CDR_LE encapsulation header",
+    "text": "dds::cdr::Encoder shall prepend the 4-byte CDR_LE encapsulation header ({0x01,0x00,0x00,0x00}) to every buffer it produces; dds::cdr::Decoder::create() shall validate and consume that header, returning std::nullopt when the buffer is shorter than 4 bytes or the 2-byte little-endian scheme field is neither 0x0001 (CDR_LE) nor 0x0000 (CDR_BE); a decoder created from an accepted CDR_BE-scheme header shall still decode the remaining payload little-endian.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": ["go-DDS tools/cdr/cdr.go NewEncoder/NewDecoder", "OMG DDS-XTypes 1.3 §10.2 Table 10.1"]
+  },
+  {
+    "id": "REQ-CDR-002",
+    "title": "CDR encoder alignment",
+    "text": "dds::cdr::Encoder shall pad bytes between fields to enforce natural alignment: 2-byte for int16/uint16, 4-byte for int32/uint32/float32, 8-byte for int64/uint64/float64; bool/int8/uint8 fields shall not be padded. The encapsulation header shall count toward alignment.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": ["go-DDS tools/cdr/cdr.go Encoder.align", "OMG DDS-XTypes 1.3 §10 (XCDR1 alignment rules)"]
+  },
+  {
+    "id": "REQ-CDR-003",
+    "title": "CDR decoder alignment and underrun detection",
+    "text": "dds::cdr::Decoder shall enforce the same alignment rules as dds::cdr::Encoder, advancing past padding bytes before every aligned read, and every read_*() method shall return std::nullopt (never read out of bounds or invoke undefined behavior) when fewer bytes remain in the buffer than the field requires, including when a string or byte-sequence's declared length exceeds the remaining buffer.",
+    "category": "conformance",
+    "criticality": "high",
+    "standards": ["go-DDS tools/cdr/cdr.go Decoder.align/Decoder.need", "ISO 26262 ASIL-B (defensive bounds checking)"]
+  },
+  {
+    "id": "REQ-CDR-004",
+    "title": "CDR string and bytes encoding",
+    "text": "dds::cdr::Encoder::write_string(s) shall encode a 4-byte-aligned uint32 length (s.size()+1, for the null terminator) followed by s's raw bytes and a trailing null byte; an empty string shall encode as length=1 followed by a single null byte. dds::cdr::Encoder::write_bytes(b) shall encode a 4-byte-aligned uint32 count (b.size()) followed by b's raw bytes with no null terminator. dds::cdr::Decoder::read_string() shall strip the trailing null terminator from its result; read_bytes() shall not.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": ["go-DDS tools/cdr/cdr.go Encoder.WriteString/WriteBytes, Decoder.ReadString/ReadBytes"]
+  },
+  {
+    "id": "REQ-CDR-005",
+    "title": "CDR encoder/decoder length introspection",
+    "text": "dds::cdr::Encoder::len() shall return the current total encoded length including the 4-byte encapsulation header; dds::cdr::Decoder::remaining() shall return the number of bytes not yet consumed from the buffer, both updating incrementally as fields are written or read.",
+    "category": "functional",
+    "criticality": "low",
+    "standards": ["go-DDS tools/cdr/cdr.go Encoder.Len/Decoder.Remaining"]
   }
 ]
