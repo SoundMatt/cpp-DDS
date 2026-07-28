@@ -19,6 +19,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <thread>
 
@@ -499,12 +500,16 @@ TEST_CASE("Bridge::close: idempotent", "[bridge][grpc][REQ-BRIDGE-GRPC-005]") {
 
 namespace {
 std::string write_temp_file(const std::string& contents) {
-    std::string path = std::string(std::getenv("TMPDIR") ? std::getenv("TMPDIR") : "/tmp") +
-                        "/cppdds_bridge_grpc_test_" + std::to_string(std::rand()) + ".yaml";
+    // Use std::filesystem::temp_directory_path() rather than a hardcoded
+    // "/tmp" fallback — matching this repo's existing convention (see
+    // tests/test_ddstool_cli.cpp, tests/test_rtps_reliable.cpp) and, unlike
+    // "/tmp", portable to windows-2022 CI where no such path exists.
+    std::filesystem::path path = std::filesystem::temp_directory_path() /
+        ("cppdds_bridge_grpc_test_" + std::to_string(std::rand()) + ".yaml");
     std::ofstream out(path, std::ios::binary);
     out << contents;
     out.close();
-    return path;
+    return path.string();
 }
 } // namespace
 
