@@ -427,5 +427,77 @@
     "category": "safety",
     "criticality": "high",
     "standards": ["go-DDS safety/e2e.go E2ESubscriber"]
+  },
+  {
+    "id": "REQ-SECURITY-001",
+    "title": "Plugin interface contract",
+    "text": "dds::security shall define a Plugin interface with seal() and open() operations that must be inverses of one another for any plaintext when both calls succeed; all built-in Plugin implementations shall be safe for concurrent use from multiple threads.",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["go-DDS security/security.go Plugin", "ISO 26262 ASIL-B §5.4.7"]
+  },
+  {
+    "id": "REQ-SECURITY-002",
+    "title": "NullPlugin identity transform",
+    "text": "dds::security::NullPlugin shall implement Plugin as the identity transform: seal() and open() return the input unchanged, providing neither confidentiality nor integrity.",
+    "category": "security",
+    "criticality": "medium",
+    "standards": ["go-DDS security/security.go NullPlugin"]
+  },
+  {
+    "id": "REQ-SECURITY-003",
+    "title": "HMACPlugin wire format",
+    "text": "dds::security::HMACPlugin::seal() shall append a 32-byte HMAC-SHA-256 authentication tag computed over the plaintext to the end of the payload (wire format: plaintext || HMAC[32]), byte-for-byte identical to go-DDS's security.HMACPlugin, verified against reference vectors independently derived from a fresh go-DDS clone.",
+    "category": "conformance",
+    "criticality": "high",
+    "standards": ["go-DDS security/security.go HMACPlugin"]
+  },
+  {
+    "id": "REQ-SECURITY-004",
+    "title": "HMACPlugin tag verification",
+    "text": "dds::security::HMACPlugin::open() shall recompute the HMAC-SHA-256 tag over the received plaintext and compare it in constant time against the trailing 32 bytes of the payload, returning ErrHMACTooShort for payloads shorter than 32 bytes and ErrHMACVerificationFailed when the tag does not match (including when opened with a different key than was used to seal).",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["go-DDS security/security.go HMACPlugin", "ISO 26262 ASIL-B §8.4.5"]
+  },
+  {
+    "id": "REQ-SECURITY-005",
+    "title": "AESGCMPlugin wire format",
+    "text": "dds::security::AESGCMPlugin::seal() shall encrypt the plaintext with AES-256-GCM using a fresh random 12-byte nonce per call, producing wire format nonce[12] || ciphertext || GCM-tag[16], byte-for-byte identical to go-DDS's security.AESGCMPlugin, verified against reference vectors independently derived from a fresh go-DDS clone; new_aes_gcm_plugin() shall return ErrAESKeyInvalidLength when the supplied key is not exactly 32 bytes.",
+    "category": "conformance",
+    "criticality": "high",
+    "standards": ["go-DDS security/security.go AESGCMPlugin"]
+  },
+  {
+    "id": "REQ-SECURITY-006",
+    "title": "AESGCMPlugin authenticated decryption",
+    "text": "dds::security::AESGCMPlugin::open() shall verify the GCM authentication tag and reject (ErrAESDecryptFailed) any payload that has been tampered with or was sealed under a different key, and shall return ErrAESPayloadTooShort for payloads shorter than the 12-byte nonce plus 16-byte tag; two seal() calls on identical plaintext shall never produce identical ciphertext (no nonce reuse).",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["go-DDS security/security.go AESGCMPlugin", "ISO 26262 ASIL-B §8.4.5"]
+  },
+  {
+    "id": "REQ-SECURITY-007",
+    "title": "Key material isolation and generation",
+    "text": "HMACPlugin and AESGCMPlugin constructors shall copy caller-supplied key material so that subsequent mutation of the caller's buffer does not affect the plugin; new_random_key(n) shall return n cryptographically random bytes drawn from the OS entropy source, with each call producing distinct output.",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["go-DDS security/security.go NewRandomKey", "NIST SP 800-53 SC-12"]
+  },
+  {
+    "id": "REQ-SECURITY-008",
+    "title": "Topic ACL rule evaluation",
+    "text": "dds::security::AccessPolicy shall evaluate its Rule list in declaration order and grant access per the first Pattern that matches a given topic (glob semantics: '*' matches one path segment, not spanning '/'; '?' and '[...]' character classes as in Go's path.Match); a topic matching no rule, or an AccessPolicy with no rules, shall deny both Read and Write; a malformed pattern shall be skipped rather than causing an error or crash.",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["go-DDS security/access.go AccessPolicy", "NIST SP 800-53 AC-3"]
+  },
+  {
+    "id": "REQ-SECURITY-009",
+    "title": "Anti-replay sequence enforcement",
+    "text": "dds::security::ReplayGuard::check(seq, ts) shall record seq as seen at ts and return no error the first time a sequence number is presented within the configured sliding window, and shall return ErrReplay for any subsequent check() of the same sequence number within that window; entries older than the window (relative to the most recent check()/purge() call) shall be pruned; a non-positive window shall default to 30 seconds; ReplayGuard shall be safe for concurrent use from multiple threads.",
+    "category": "security",
+    "criticality": "high",
+    "standards": ["go-DDS security/replay.go ReplayGuard", "NIST SP 800-53 SC-23", "ISO 26262 ASIL-B §5.4.7"]
   }
 ]

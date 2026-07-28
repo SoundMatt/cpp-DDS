@@ -6,6 +6,55 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.18.0] — 2026-07-27
+
+### Added
+
+- `dds::security::Plugin` / `NullPlugin` / `HMACPlugin` / `AESGCMPlugin`
+  (`include/dds/security/security.hpp`, `src/security/security.cpp`) — a
+  byte-compatible C++ port of go-DDS's `security` package
+  (`security/security.go`), the second item of `ROADMAP.md`'s "Tier 2 —
+  safety and security". `HMACPlugin::seal()` appends a 32-byte
+  HMAC-SHA-256 authentication tag (`plaintext || HMAC[32]`); `AESGCMPlugin`
+  encrypts with AES-256-GCM using a fresh random 12-byte nonce per call
+  (`nonce[12] || ciphertext || GCM-tag[16]`, 28 bytes of overhead). Both
+  wire formats are byte-for-byte identical to go-DDS's, verified against
+  reference vectors independently derived from a fresh go-DDS clone (see
+  `tests/test_security_hmac.cpp`, `tests/test_security_aesgcm.cpp`).
+- `dds::security::AccessPolicy` / `Permission` / `Rule`
+  (`include/dds/security/access.hpp`, `src/security/access.cpp`) — a
+  per-participant/per-topic ACL: rules are evaluated in declaration order
+  with first-match-wins glob semantics, a faithful byte-oriented port of
+  Go's `path.Match` (`security/access.go`). No wire format — behavioral
+  parity verified against go-DDS's actual match decisions for the same
+  (pattern, topic) case matrix (see `tests/test_security_access.cpp`).
+- `dds::security::ReplayGuard`
+  (`include/dds/security/replay.hpp`, `src/security/replay.cpp`) — a
+  sliding-time-window anti-replay sequence-number tracker
+  (`security/replay.go`); `check()` returns `ErrReplay` for any sequence
+  number already seen within the configured window (default 30s).
+- No external crypto dependency is fetched for this project
+  (`cmake/FetchDeps.cmake` — Catch2 only): SHA-256, HMAC-SHA-256, AES-256,
+  and AES-256-GCM are implemented from scratch under `src/security/crypto/`
+  (an internal, non-public implementation detail) and verified byte-exact
+  against FIPS 180-4/RFC 4231/NIST SP 800-38A known-answer test vectors,
+  the classic McGrew-Viega/NIST AES-256-GCM all-zero test vector, and
+  Go's actual `crypto/aes` + `crypto/cipher` + `crypto/hmac` stdlib output
+  (which is what go-DDS's plugins wrap internally).
+- `requirements/requirements.json` gains `REQ-SECURITY-001` through
+  `REQ-SECURITY-009`, traced (`fusa:req`) and tested (`fusa:test`).
+
+Internal/additive: `dds::security::Plugin` is a standalone seal/open
+library, not wired into `dds::adapt()`, `dds::mock`, or the RTPS transport —
+matching `dds::safety::E2EPublisher`'s own precedent from v0.17.0. go-DDS's
+`security.cert`/`security.discovery` (PKI-based mutual authentication and
+DDS-discovery security wrapping, `security/cert.go` + `security/discovery.go`)
+are separate surfaces beyond this item's stated scope and are out of scope
+here, matching the `ddssafety`/E2E item's precedent of scoping out
+`safety/metrics.go`.
+
+---
+
 ## [0.17.0] — 2026-07-27
 
 ### Added
