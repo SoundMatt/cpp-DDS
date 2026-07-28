@@ -6,6 +6,48 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.14.0] — 2026-07-28
+
+### Added
+
+- `dds::IMetricsProvider` / `dds::IDiscoveryMetricsProvider` /
+  `dds::ITopicMetricsProvider` (see `ROADMAP.md`, "Also within `ddscore` but
+  not RTPS-specific"): DDS-package-scoped metrics interfaces mirroring
+  go-DDS's core `dds` package (`dds.go`), implemented by both
+  `dds::mock::IMockParticipant` and `dds::rtps::Participant`.
+- `dds.hpp` gains `dds::Metrics`/`IMetricsProvider`,
+  `dds::DiscoveryMetrics`/`IDiscoveryMetricsProvider`, and
+  `dds::TopicMetrics`/`ITopicMetricsProvider`, field-for-field mirrors of
+  go-DDS's `dds.go` structs/interfaces. Because C++ virtual dispatch
+  (unlike Go's structural interface satisfaction) cannot have two unrelated
+  base classes both declare a `metrics()` method with different return
+  types on the same derived class, and `dds::mock::IMockParticipant`
+  already implements `relay::IMetricsProvider::metrics()` (RELAY spec
+  §9.1), the new DDS-scoped accessor is named `dds_metrics()` instead.
+- `dds::mock::IMockParticipant` implements all three: `dds_metrics()`
+  reuses the aggregate counters already tracked for
+  `relay::IMetricsProvider`; `discovery_metrics()` always returns zero
+  values (no real network discovery, matching go-DDS's mock doc comment
+  verbatim); a new per-topic counter table backs `topic_metrics()`.
+- `dds::rtps::Participant` implements all three: new participant-level
+  aggregate atomics incremented in `Writer::write()` /
+  `Participant::dispatch()`, mirroring go-DDS's `rtpsWriter.Write` /
+  `participant.deliverToReader` counter split exactly; `discovery_metrics()`
+  surfaces the `SpdpService`/`SedpService` counters already tracked and
+  exposed since Tier-1 phases 4-5; a new per-topic counter table keyed by
+  reader topic backs `topic_metrics()`.
+- 10 new tests (`tests/test_mock.cpp`, `tests/test_rtps_participant.cpp`)
+  covering the interface hierarchy on both participants plus
+  write/deliver/drop/byte counting, per-topic breakdown, and (RTPS) live
+  discovery counters — 297/297 total. Verified locally with Release C++17
+  and a Debug ASan/UBSan pass.
+- Scope: internal, additive — not yet wired into `dds::adapt()`'s
+  `relay::INode` bridge or the `cpp-dds` CLI's `optional_interfaces`
+  capabilities list; that consumption/export layer is go-DDS's
+  `monitor`/`admin` equivalent (Tier 5, still deferred).
+
+---
+
 ## [0.13.0] — 2026-07-27
 
 ### Added
