@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(cppdds
-    VERSION 0.22.0
+    VERSION 0.23.0
     DESCRIPTION "C++ DDS library — RELAY-conformant"
     HOMEPAGE_URL "https://github.com/SoundMatt/cpp-DDS"
     LANGUAGES CXX
@@ -101,6 +101,26 @@ endif()
 #    remains separately opt-out via CPPDDS_BUILD_DDSTOOL — see
 #    ddstool/CMakeLists.txt.
 add_subdirectory(ddstool)
+
+# ── cppdds_bridges (Tier 4 — bridges; ROADMAP.md's proposed `ddsbridges`
+#    target group, first materialized here since Tier 4 is the first tier
+#    with any bridge/ code to put in it — see ROADMAP.md's "Target
+#    architecture — 5-library split" table). A separate static library,
+#    opt-in like CPPDDS_BUILD_TESTS/CPPDDS_BUILD_CLI, depending on
+#    cppdds_lib (kept as-is rather than renamed to cppdds_core: that rename
+#    is unrelated scope this PR does not take on).
+option(CPPDDS_BUILD_BRIDGES "Build the cppdds_bridges library (dds::bridge::*)" ON)
+if(CPPDDS_BUILD_BRIDGES)
+    add_library(cppdds_bridges STATIC
+        src/bridge/grpc/grpc.cpp
+        src/bridge/grpc/transport.cpp
+        src/bridge/grpc/config.cpp
+    )
+    target_include_directories(cppdds_bridges
+        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(cppdds_bridges PUBLIC cppdds_lib)
+endif()
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 

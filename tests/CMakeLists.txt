@@ -30,12 +30,23 @@ add_executable(cppdds_tests
     test_rtps_tsn.cpp
 )
 
+# dds::bridge::* tests (Tier 4) only build/link when cppdds_bridges itself
+# is being built — CPPDDS_BUILD_BRIDGES is ON by default alongside
+# CPPDDS_BUILD_TESTS, but each option is independently toggleable.
+if(CPPDDS_BUILD_BRIDGES)
+    target_sources(cppdds_tests PRIVATE test_bridge_grpc.cpp)
+endif()
+
 target_link_libraries(cppdds_tests
     PRIVATE
         cppdds_lib
         ddstool_cli
         Catch2::Catch2WithMain
 )
+
+if(CPPDDS_BUILD_BRIDGES)
+    target_link_libraries(cppdds_tests PRIVATE cppdds_bridges)
+endif()
 
 target_include_directories(cppdds_tests
     PRIVATE

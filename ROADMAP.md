@@ -843,6 +843,64 @@ therefore grpc + wan + rest first, matching what the reference implementation ac
 has, with mqtt/domain added opportunistically once go-DDS lands them rather than
 inventing a bridge spec ahead of the reference implementation.
 
+- [x] **`grpc`** — gRPC gateway bridging a `dds::IParticipant` to RPC clients over
+  JSON-encoded messages (go-DDS `bridge/grpc`, 586 LOC across `grpc.go`+`config.go`).
+  **Done (v0.23.0):** `include/dds/bridge/grpc/{grpc.hpp,transport.hpp,config.hpp}` +
+  `src/bridge/grpc/{grpc.cpp,transport.cpp,config.cpp}` — a C++ port of go-DDS's
+  `bridge/grpc` package, landed as the first member of a new `cppdds_bridges` CMake
+  target (opt-in via `CPPDDS_BUILD_BRIDGES`, default `ON`), the first concrete
+  materialization of the `ddsbridges` group proposed in the "Target architecture —
+  5-library split" table above — `cppdds_lib` itself is untouched/unrenamed. Message
+  types (`SubscribeRequest`, `PublishRequest`, `Sample`, `PublishAck`) and their JSON
+  codec (`to_json()`/`from_json()`) are field-for-field and byte-exact with go-DDS's
+  `encoding/json.Marshal` output — object key order, HTML-safe `<`/`>`/`&` escaping,
+  standard padded base64 for byte fields — verified against reference vectors captured
+  from a real go-DDS process (a throwaway `go run` program against a fresh
+  `github.com/SoundMatt/go-DDS` clone calling the actual `bridge/grpc` struct types,
+  per this repo's established white-box vector-derivation convention), including the
+  one documented codec gap: Go's nil-vs-empty-`[]byte` distinction (`null` vs. `""`)
+  isn't representable in `std::vector<uint8_t>`, so the encoder always emits `""` and
+  the decoder accepts both. `Bridge` implements all three RPCs as plain C++ methods
+  (`subscribe`/`publish`/`stream_publish`) against `SampleSender`/`PublishReceiver`
+  abstractions — enough surface to unit-test business logic with in-memory doubles,
+  mirroring go-DDS's own `grpc_internal_test.go` mock-stream pattern, independent of
+  any networking — plus lazy subscriber/publisher caching, `Options`
+  (`auth_token`/`qos`/`filter`/`transform`), and `check_auth()`, all behavior-matched
+  to go-DDS's `Bridge`/`checkAuth`/`FilterFunc`/`TransformFunc`. `transport.hpp`'s
+  `Server`/`Client` speak a real, working TCP wire protocol — a text header block
+  (RPC method name + optional `authorization: Bearer <token>`) followed by message
+  bodies framed with real gRPC length-prefixed-message framing (1-byte compression
+  flag + 4-byte big-endian length) — rather than a real HTTP/2 gRPC transport: this
+  repo has no HTTP/2 or protobuf dependency anywhere (every other module hand-rolls
+  its wire protocol rather than adopting a matching reference library — RTPS, CDR,
+  xtypes, TSN netlink), so adding grpc++ (itself dependent on protobuf and abseil)
+  for this one bridge would be a large, slow-to-build outlier; true stock-grpc-go/
+  grpc++ wire interop is deliberately deferred, exactly like the CycloneDDS backend
+  and the WAN bridge's TLS deep dive below — documented in full in `grpc.hpp`'s
+  file-level scope note, along with the `Options::qos`/`checkAuth` behavioral
+  simplifications the C++ port makes (both structurally forced by the language, not
+  fidelity gaps in anything client-observable). `config.hpp`/`config.cpp` hand-roll a
+  minimal YAML-subset parser (top-level scalar keys plus one block-form `topics:`
+  list) rather than a general YAML library dependency, matching this module's own
+  "own small parser" convention — `TopicConfig::effective_qos()` deliberately starts
+  from `dds::default_qos()` rather than go-DDS's raw zero-value `dds.QoS{Reliability:
+  ...}` literal (`HistoryDepth==0`, a field cpp-DDS's own `rtps` package doesn't
+  consume either — see `include/dds/rtps/history_cache.hpp`), a documented low-risk
+  improvement over reproducing what reads as an accidental Go zero-value default.
+  Verified with 41 new tests (`tests/test_bridge_grpc.cpp`) — byte-exact JSON
+  reference-vector tests, `Bridge` unit tests against in-memory `SampleSender`/
+  `PublishReceiver` doubles covering every RPC's success/error/auth/filter/transform
+  path (mirroring go-DDS's own `grpc_test.go`/`grpc_internal_test.go` scenario
+  matrix), `Config` load/apply tests, and real loopback-TCP end-to-end tests
+  (`Server`+`Client`) covering Publish/Subscribe/StreamPublish, auth accept/reject,
+  and idempotent `Server::stop()` unblocking a live Subscribe call — 581/581 tests
+  total, verified locally with Release C++17/C++20 builds and a Debug ASan+UBSan pass
+  (clang, macOS) with zero new warnings under `-Wall -Wextra -Wpedantic`. `REQ-BRIDGE-
+  GRPC-001` through `REQ-BRIDGE-GRPC-011` added, traced and tested.
+- [ ] **`wan`** — WAN bridge (go-DDS `bridge/wan`). Baseline scope (TLS deep dive is
+  Tier 4's explicitly-deferred stretch item, see "Future" below).
+- [ ] **`rest`** — REST bridge (go-DDS `bridge/rest`).
+
 ## Tier 5 — observability (v0.6.0)
 
 `otel`/`admin`/`monitor`/`record`/`services` equivalents (go-DDS: `otel` 64 LOC, `admin`
