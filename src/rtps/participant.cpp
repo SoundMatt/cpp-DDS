@@ -46,6 +46,43 @@ Guid pack_guid(const GUID& g) {
 // file-level scope note; this phase-6 comment's original rationale for a
 // local duplicate ("phase 7 ... does not exist yet") no longer applies.
 
+// Builds the wire message(s) for one write of `wrapped` (already
+// CDR-wrapped) payload bytes at sequence number seq_num: a single DATA
+// submessage when small enough to fit under fragment.hpp's
+// kMaxFragmentPayload, or one message per DATA_FRAG fragment otherwise
+// (Tier-1 phase 8, "Fragmentation" — see fragment.hpp's file-level scope
+// note). Shared by Writer::write and Writer::handle_ack_nack so
+// retransmission fragments exactly like a live write of the same payload
+// would — a correctness improvement over go-DDS's own known limitation
+// (its sendHistory retains only the first fragment's wire bytes for a
+// fragmented write, so its ACKNACK-triggered retransmit of a fragmented
+// sample only ever resends fragment #1; see fragment.hpp for the full
+// rationale).
+std::vector<std::vector<uint8_t>> build_data_messages(const GuidPrefix& prefix, const EntityId& writer_eid,
+                                                        const SequenceNumber& seq_num,
+                                                        const std::vector<uint8_t>& wrapped) {
+    std::vector<std::vector<uint8_t>> msgs;
+    if (wrapped.size() > kMaxFragmentPayload) {
+        auto frags = split_into_fragments(writer_eid, seq_num, wrapped);
+        msgs.reserve(frags.size());
+        for (const auto& frag : frags) {
+            std::vector<uint8_t> submsg;
+            frag.encode(submsg);
+            msgs.push_back(wrap_in_rtps_message(prefix, kVendorIdCppDDS, submsg));
+        }
+    } else {
+        DataSubmessage ds;
+        ds.reader_entity_id = kEntityIdUnknown;
+        ds.writer_entity_id = writer_eid;
+        ds.seq_num            = seq_num;
+        ds.payload             = wrapped;
+        std::vector<uint8_t> submsg;
+        ds.encode(submsg);
+        msgs.push_back(wrap_in_rtps_message(prefix, kVendorIdCppDDS, submsg));
+    }
+    return msgs;
+}
+
 constexpr auto kShutdownPollSlice = std::chrono::milliseconds(50);
 
 // FNV-1a hash for GUID, used to key the per-remote-writer RecvTracker map
@@ -179,12 +216,12 @@ private:
 
 // ── Writer ───────────────────────────────────────────────────────────────────
 
-// Writer implements dds::IPublisher: best-effort DATA send to every
-// SEDP-matched remote reader locator plus unconditional local (same-
-// participant) delivery. C++ port of the best-effort subset of go-DDS's
-// rtpsWriter.Write (rtps/participant.go) — see participant.hpp's file-level
-// scope note for what is intentionally not ported (reliability, TSN,
-// security, fragmentation).
+// Writer implements dds::IPublisher: best-effort DATA (or DATA_FRAG, for
+// large payloads — Tier-1 phase 8) send to every SEDP-matched remote reader
+// locator plus unconditional local (same-participant) delivery. C++ port of
+// the best-effort subset of go-DDS's rtpsWriter.Write (rtps/participant.go)
+// — see participant.hpp's file-level scope note for what is intentionally
+// not ported (TSN, security).
 class Writer : public IPublisher {
 public:
     Writer(std::shared_ptr<Participant> p, std::string topic, EntityId eid, QoS qos, std::size_t history_depth,
@@ -227,20 +264,18 @@ public:
         const uint64_t seq = seq_.fetch_add(1) + 1;
         const auto     now = std::chrono::system_clock::now();
         const GUID     source{p_->guid_prefix(), eid_};
+        const SequenceNumber seq_num = u64_to_sn(seq);
 
-        // Build wire bytes: existing, already byte-verified primitives only
-        // (cdr_wrap_payload from phase 2, DataSubmessage::encode from
-        // phase 1, wrap_in_rtps_message from phase 4) — this phase
-        // introduces no new wire encoding of its own (see participant.hpp's
-        // file-level scope note).
-        DataSubmessage ds;
-        ds.reader_entity_id = kEntityIdUnknown;
-        ds.writer_entity_id = eid_;
-        ds.seq_num            = u64_to_sn(seq);
-        ds.payload             = cdr_wrap_payload(payload);
-        std::vector<uint8_t> submsg;
-        ds.encode(submsg);
-        auto msg = wrap_in_rtps_message(p_->guid_prefix(), kVendorIdCppDDS, submsg);
+        // Build wire bytes from existing, already byte-verified primitives
+        // only (cdr_wrap_payload from phase 2, DataSubmessage::encode from
+        // phase 1, wrap_in_rtps_message from phase 4, DataFrag::encode from
+        // phase 8) — this phase introduces no new wire encoding of its own
+        // beyond what build_data_messages already composes from pinned
+        // primitives (see participant.hpp's file-level scope note).
+        // build_data_messages fragments into DATA_FRAG submessages when the
+        // CDR-wrapped payload exceeds fragment.hpp's kMaxFragmentPayload
+        // (Tier-1 phase 8, "Fragmentation").
+        auto msgs = build_data_messages(p_->guid_prefix(), eid_, seq_num, cdr_wrap_payload(payload));
 
         // HistoryCache: this writer's sequence-number-indexed retained
         // window. Populated for every writer regardless of QoS (matching
@@ -277,13 +312,15 @@ public:
         // `source.Prefix == r.p.guidPrefix`.
         p_->dispatch(source, topic_, payload, now, seq);
 
-        // Remote delivery: unicast to every SEDP-matched reader locator for
-        // this topic.
+        // Remote delivery: unicast every message (a single DATA, or every
+        // DATA_FRAG fragment) to every SEDP-matched reader locator for this
+        // topic. Matches go-DDS's Write() loop order (locator outer,
+        // message inner).
         for (const auto& loc : p_->sedp().matched_reader_locators_for_topic(topic_)) {
             std::string addr;
             int          port = 0;
             if (locator_to_dest(loc, addr, port)) {
-                p_->send_data(addr, port, msg);
+                for (const auto& m : msgs) p_->send_data(addr, port, m);
             }
         }
 
@@ -349,19 +386,20 @@ public:
             auto            change = history_.get(seq);
             if (!change) continue;
 
-            DataSubmessage ds;
-            ds.reader_entity_id = kEntityIdUnknown;
-            ds.writer_entity_id = eid_;
-            ds.seq_num            = u64_to_sn(seq);
-            ds.payload             = cdr_wrap_payload(change->payload);
-            std::vector<uint8_t> submsg;
-            ds.encode(submsg);
-            auto msg = wrap_in_rtps_message(p_->guid_prefix(), kVendorIdCppDDS, submsg);
+            // Re-fragments when the payload is still over threshold,
+            // matching a live write of the same payload — see
+            // build_data_messages's own doc comment for why this is a
+            // deliberate correctness improvement over go-DDS's own
+            // first-fragment-only retransmit (Tier-1 phase 8).
+            auto msgs = build_data_messages(p_->guid_prefix(), eid_, u64_to_sn(seq),
+                                             cdr_wrap_payload(change->payload));
 
             for (const auto& loc : p_->sedp().matched_reader_locators_for_topic(topic_)) {
                 std::string addr;
                 int          port = 0;
-                if (locator_to_dest(loc, addr, port)) p_->send_data(addr, port, msg);
+                if (locator_to_dest(loc, addr, port)) {
+                    for (const auto& m : msgs) p_->send_data(addr, port, m);
+                }
             }
         }
 
@@ -753,6 +791,26 @@ void Participant::handle_data_packet(const std::vector<uint8_t>& data, const std
         } else if (sh->submessage_id == kSubmessageIdAckNack) {
             auto an = AckNack::decode(body + pos, entry_len);
             if (an) handle_ack_nack(*an, from_address, from_port);
+        } else if (sh->submessage_id == kSubmessageIdDataFrag) {
+            // Tier-1 phase 8 ("Fragmentation") — see fragment.hpp's
+            // file-level scope note for why this reassembly is wired into
+            // the receive path even though go-DDS's own participant.go
+            // never wires its own (otherwise fully working)
+            // fragmentAssembler into an equivalent switch case.
+            auto df = DataFrag::decode(body + pos, entry_len);
+            if (df) {
+                const GUID source{hdr->guid_prefix, df->writer_entity_id};
+                if (auto reassembled = frag_assembler_.receive(source, *df)) {
+                    auto raw = cdr_unwrap_payload(*reassembled);
+                    if (raw) {
+                        const auto now = std::chrono::system_clock::now();
+                        // Matches the plain-DATA path's ordering above:
+                        // reliable-delivery bookkeeping before dispatch.
+                        notify_reliable_readers(source, df->writer_seq_num, from_address, from_port);
+                        dispatch(source, "", *raw, now, sn_to_u64(df->writer_seq_num));
+                    }
+                }
+            }
         }
         pos += entry_len;
     }

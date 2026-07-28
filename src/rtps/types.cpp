@@ -313,6 +313,61 @@ void Gap::encode(std::vector<uint8_t>& out) const {
     out.insert(out.end(), body.begin(), body.end());
 }
 
+// ── DATA_FRAG submessage ─────────────────────────────────────────────────────
+
+void DataFrag::encode(std::vector<uint8_t>& out) const {
+    // Body layout: extraFlags(2)=0 + octetsToInlineQos(2)=0 + readerId(4) +
+    // writerId(4) + writerSeqNum.high(4) + writerSeqNum.low(4) +
+    // fragmentStartingNum(4) + fragmentsInSubmsg(2) + fragmentSize(2) +
+    // dataSize(4) + payload = 32 fixed bytes, matching go-DDS's
+    // marshalDataFrag exactly.
+    std::vector<uint8_t> body;
+    body.reserve(32 + payload.size());
+    put_u16_le(body, 0); // extraFlags
+    put_u16_le(body, 0); // octetsToInlineQos
+    body.insert(body.end(), reader_entity_id.bytes.begin(), reader_entity_id.bytes.end());
+    body.insert(body.end(), writer_entity_id.bytes.begin(), writer_entity_id.bytes.end());
+    put_i32_le(body, writer_seq_num.high);
+    put_u32_le(body, writer_seq_num.low);
+    put_u32_le(body, fragment_starting_num);
+    put_u16_le(body, fragments_in_submsg);
+    put_u16_le(body, fragment_size);
+    put_u32_le(body, data_size);
+    body.insert(body.end(), payload.begin(), payload.end());
+
+    SubmessageHeader hdr;
+    hdr.submessage_id         = kSubmessageIdDataFrag;
+    hdr.flags                 = kFlagEndianness;
+    hdr.octets_to_next_header = static_cast<uint16_t>(body.size());
+
+    out.reserve(out.size() + SubmessageHeader::kSize + body.size());
+    hdr.encode(out);
+    out.insert(out.end(), body.begin(), body.end());
+}
+
+std::optional<DataFrag> DataFrag::decode(const uint8_t* data, std::size_t len) {
+    auto hdr = SubmessageHeader::decode(data, len);
+    if (!hdr || hdr->submessage_id != kSubmessageIdDataFrag) return std::nullopt;
+
+    const std::size_t body_len = hdr->octets_to_next_header;
+    if (SubmessageHeader::kSize + body_len > len) return std::nullopt;
+    if (body_len < 32) return std::nullopt;
+
+    const uint8_t* body = data + SubmessageHeader::kSize;
+
+    DataFrag f;
+    std::memcpy(f.reader_entity_id.bytes.data(), body + 4, EntityId::kSize);
+    std::memcpy(f.writer_entity_id.bytes.data(), body + 8, EntityId::kSize);
+    f.writer_seq_num.high    = get_i32_le(body + 12);
+    f.writer_seq_num.low     = get_u32_le(body + 16);
+    f.fragment_starting_num  = get_u32_le(body + 20);
+    f.fragments_in_submsg    = get_u16_le(body + 24);
+    f.fragment_size          = get_u16_le(body + 26);
+    f.data_size              = get_u32_le(body + 28);
+    f.payload.assign(body + 32, body + body_len);
+    return f;
+}
+
 // ── Participant/entity identity allocation ──────────────────────────────────
 
 GuidPrefix new_guid_prefix() {

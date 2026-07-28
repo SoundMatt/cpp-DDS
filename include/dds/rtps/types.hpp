@@ -203,6 +203,9 @@ inline constexpr uint8_t kSubmessageIdGap       = 0x08;
 inline constexpr uint8_t kSubmessageIdHeartbeat = 0x07;
 inline constexpr uint8_t kSubmessageIdAckNack   = 0x06;
 inline constexpr uint8_t kSubmessageIdInfoTs    = 0x09;
+// DATA_FRAG (§8.3.7.3), added for Tier-1 phase 8 ("Fragmentation" — see
+// types.hpp's DataFrag doc comment below).
+inline constexpr uint8_t kSubmessageIdDataFrag  = 0x16;
 
 // flag bits for the DATA submessage (§9.4.5.3).
 inline constexpr uint8_t kFlagEndianness = 0x01; // E: 1 = little-endian
@@ -330,6 +333,40 @@ struct Gap {
     // gapStart(8) + gapList.bitmapBase(8, = gapEnd+1) +
     // gapList.numBits(4 LE, = 0) = 28 bytes.
     void encode(std::vector<uint8_t>& out) const;
+};
+
+// ── DATA_FRAG submessage (RTPS 2.3 §8.3.7.3) ─────────────────────────────────
+//
+// Added for Tier-1 phase 8 ("Fragmentation" — see ROADMAP.md). C++ port of
+// go-DDS's DataFrag/marshalDataFrag/parseDataFrag (rtps/fragment.go): a
+// payload too large for one submessage is split across multiple DATA_FRAG
+// submessages, each carrying one fragment. Matching go-DDS's
+// splitIntoFragmentsN, this port's own fragment producer (fragment.hpp)
+// always sets fragments_in_submsg = 1 — the wire format itself allows
+// packing more than one fragment per submessage, but no go-DDS producer
+// ever does, so there is nothing to port for that case.
+struct DataFrag {
+    EntityId       reader_entity_id{};
+    EntityId       writer_entity_id{};
+    SequenceNumber writer_seq_num{};
+    uint32_t       fragment_starting_num{0}; // 1-based index of the first fragment in this submessage
+    uint16_t       fragments_in_submsg{0};   // number of fragments in this submessage
+    uint16_t       fragment_size{0};         // size of each fragment in bytes (last may be smaller)
+    uint32_t       data_size{0};             // total (unfragmented) data size in bytes
+    std::vector<uint8_t> payload;            // raw bytes of the fragment(s)
+
+    // Builds the full submessage (4-byte SubmessageHeader + 32-byte fixed
+    // body + payload) and appends it to out, matching go-DDS's
+    // marshalDataFrag exactly: extraFlags(2)=0, octetsToInlineQos(2)=0,
+    // readerId(4), writerId(4), writerSeqNum.high(4 LE),
+    // writerSeqNum.low(4 LE), fragmentStartingNum(4 LE),
+    // fragmentsInSubmsg(2 LE), fragmentSize(2 LE), dataSize(4 LE), payload.
+    void encode(std::vector<uint8_t>& out) const;
+
+    // Parses a full DATA_FRAG submessage (header + body) from data[0..len).
+    // Returns std::nullopt on malformed input (short buffer, wrong
+    // submessage id, or a declared length that overruns the buffer).
+    static std::optional<DataFrag> decode(const uint8_t* data, std::size_t len);
 };
 
 // ── Participant/entity identity allocation ──────────────────────────────────

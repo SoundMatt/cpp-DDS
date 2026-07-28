@@ -295,8 +295,50 @@ buildable and testable against go-DDS's file of the same concern):
    anywhere yet. Internal to `cppdds_lib`, under `dds/rtps/` — not yet wired into
    `dds::IParticipant`'s public surface beyond `dds::rtps::Participant` itself, nor
    into any automatic-transport-selection surface.
-8. **Fragmentation** — `FragmentedData` submessages for payloads over 64 KB. Reference:
-   `fragment.go` (231 LOC).
+8. [x] **Fragmentation** — `FragmentedData` submessages for payloads over 64 KB. Reference:
+   `fragment.go` (231 LOC). **Done (v0.10.0):** `DataFrag` submessage type added to
+   `include/dds/rtps/types.hpp` + `src/rtps/types.cpp` (the well-known
+   `kSubmessageIdDataFrag` = 0x16 constant phase 1 already reserved a slot for),
+   verified byte-for-byte against go-DDS reference vectors (calling go-DDS's actual
+   `marshalDataFrag`/`splitIntoFragmentsN`/`wrapInRTPSMessage` functions directly) in
+   the new `tests/test_rtps_fragment.cpp`. New `include/dds/rtps/fragment.hpp`
+   (`dds::rtps::FragmentAssembler`, `split_into_fragments`/`split_into_fragmentsN`,
+   `kMaxFragmentPayload`, `kMaxReassemblyBytes`, `kStaleFragAge`): a header-only C++
+   port of `fragment.go`'s producer (`splitIntoFragments`/`splitIntoFragmentsN`) and
+   receiver (`fragmentAssembler`), matching `reliable.hpp`'s existing precedent of
+   keeping submessage wire types in `types.hpp` and their bookkeeping in their own
+   header. `include/dds/rtps/participant.hpp` + `src/rtps/participant.cpp` wire these
+   together: `Writer::write` fragments the CDR-wrapped payload into DATA_FRAG
+   submessages whenever it exceeds `kMaxFragmentPayload` (matching go-DDS's `Write()`
+   threshold check — cpp-DDS has no TSN writer yet, so unlike go-DDS's
+   `fragmentSize()` this always uses the plain constant), `Writer::handle_ack_nack`
+   re-fragments from `HistoryCache` on ACKNACK-triggered retransmit (a deliberate
+   correctness improvement over go-DDS's own known limitation — its `sendHistory`
+   retains only the first fragment's wire bytes for a fragmented write, so its own
+   ACKNACK retransmit of a fragmented sample only ever resends fragment #1), and
+   `Participant::handle_data_packet` gains a `kSubmessageIdDataFrag` case that
+   decodes and reassembles incoming fragments via a new `Participant::frag_assembler_`
+   member before dispatching — completing the round trip even though go-DDS's own
+   `participant.go` never wires its own (otherwise fully working) `fragmentAssembler`
+   into an equivalent switch case; see `fragment.hpp`'s file-level scope note for the
+   full rationale on both deviations. `FragmentAssembler` keys reassembly by the full
+   writer GUID (`GuidPrefix` + `EntityId`) plus the full 64-bit sequence number rather
+   than go-DDS's own `EntityId` + low-32-bits-only key, a correctness improvement with
+   no wire-format consequence (the key is never serialized). Verified with byte-exact
+   `DataFrag`/`split_into_fragments_n` reference-vector tests, `FragmentAssembler`
+   behavioral unit tests (in-order and out-of-order reassembly reproducing the go-DDS
+   vectors, partial-reassembly, malformed/oversized rejection, cross-writer key
+   isolation), and two end-to-end tests driving a real `Participant` over real
+   loopback UDP (a 5000-byte `Writer::write` fragmented on send and reassembled by a
+   second `Participant`'s real `data_loop()`; a reliable writer re-fragmenting a
+   5000-byte payload correctly on ACKNACK from a raw-socket stand-in peer) —
+   264/264 tests, verified locally with Release C++17/C++20 builds (plus the new
+   files additionally compiled warning-clean under a genuine `-std=c++20` invocation
+   directly, per phase 6's precedent for this repo's C++20 CI-leg quirk) and a Debug
+   ASan/UBSan pass on macOS/AppleClang; CI additionally exercises Linux/gcc-12
+   ASan+UBSan. Internal to `cppdds_lib`, under `dds/rtps/` — not yet wired into
+   `dds::IParticipant`'s public surface beyond `dds::rtps::Participant` itself, nor
+   into any automatic-transport-selection surface.
 9. **Loan integration** (stretch, can slip to a `v0.2.x` point release without blocking
    the rest of Tier 1) — zero-copy loaned-sample publishing wired into the RTPS writer
    path, backed by a pool allocator. Reference: `loan.go` (66 LOC); pairs with the
@@ -317,7 +359,8 @@ delivery, since reliable QoS depends on phase 6's scaffolding):
 (Actual tags diverged from this original `v0.2.x` suggestion once phase 1 landed —
 each phase shipped as its own incrementing `v0.MINOR.0` release instead:
 v0.3.0=phase 1, v0.4.0=phase 2, v0.5.0=phase 3, v0.6.0=phase 4, v0.7.0=phase 5,
-v0.8.0=phase 6, v0.9.0=phase 7 — see each phase's own "Done (vX.Y.0)" note above.)
+v0.8.0=phase 6, v0.9.0=phase 7, v0.10.0=phase 8 — see each phase's own
+"Done (vX.Y.0)" note above.)
 
 Also within `ddscore` but not RTPS-specific, carried forward from the previous roadmap
 draft and small enough to slot in opportunistically alongside Tier 1 rather than blocking
