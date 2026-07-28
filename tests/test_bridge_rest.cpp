@@ -462,7 +462,14 @@ TEST_CASE("run_sse_loop: delivers samples with a monotonically increasing bridge
           "[bridge][rest][sse][REQ-BRIDGE-REST-007]") {
     auto p = make_participant();
     brest::Bridge bridge(p, brest::Options{});
-    auto [sub, serr] = bridge.get_subscriber("loop/basic");
+    // Note: deliberately not `auto [sub, serr] = ...` — capturing a structured
+    // binding by reference in a lambda is a C++20 extension (accepted by
+    // GCC/Apple Clang, rejected by upstream Clang <20 in strict mode), so we
+    // bind ordinary reference variables instead, which every lambda capture
+    // mode has always supported.
+    auto  sub_result = bridge.get_subscriber("loop/basic");
+    auto& sub        = sub_result.first;
+    auto& serr       = sub_result.second;
     REQUIRE_FALSE(serr);
 
     FakeSseSink sink;
@@ -488,7 +495,9 @@ TEST_CASE("run_sse_loop: ends with success when the subscriber's channel closes"
           "[bridge][rest][sse][REQ-BRIDGE-REST-007]") {
     auto p = make_participant();
     brest::Bridge bridge(p, brest::Options{});
-    auto [sub, serr] = bridge.get_subscriber("loop/closed");
+    auto  sub_result = bridge.get_subscriber("loop/closed");
+    auto& sub        = sub_result.first;
+    auto& serr       = sub_result.second;
     REQUIRE_FALSE(serr);
 
     FakeSseSink sink;
@@ -519,7 +528,9 @@ TEST_CASE("run_sse_loop: a send_message failure ends the loop with failure",
           "[bridge][rest][sse][REQ-BRIDGE-REST-007]") {
     auto p = make_participant();
     brest::Bridge bridge(p, brest::Options{});
-    auto [sub, serr] = bridge.get_subscriber("loop/write-err");
+    auto  sub_result = bridge.get_subscriber("loop/write-err");
+    auto& sub        = sub_result.first;
+    auto& serr       = sub_result.second;
     REQUIRE_FALSE(serr);
 
     FakeSseSink sink;
@@ -544,7 +555,9 @@ TEST_CASE("run_sse_loop: fires a keepalive after the configured interval when id
     brest::Options opts;
     opts.sse_keepalive = 10ms;
     brest::Bridge bridge(p, opts);
-    auto [sub, serr] = bridge.get_subscriber("loop/keepalive");
+    auto  sub_result = bridge.get_subscriber("loop/keepalive");
+    auto& sub        = sub_result.first;
+    auto& serr       = sub_result.second;
     REQUIRE_FALSE(serr);
 
     FakeSseSink sink;
@@ -561,7 +574,9 @@ TEST_CASE("run_sse_loop: a send_keepalive failure ends the loop with failure",
     brest::Options opts;
     opts.sse_keepalive = 10ms;
     brest::Bridge bridge(p, opts);
-    auto [sub, serr] = bridge.get_subscriber("loop/keepalive-err");
+    auto  sub_result = bridge.get_subscriber("loop/keepalive-err");
+    auto& sub        = sub_result.first;
+    auto& serr       = sub_result.second;
     REQUIRE_FALSE(serr);
 
     FakeSseSink sink;
@@ -792,9 +807,11 @@ TEST_CASE("Server::addr: non-empty after serve", "[bridge][rest][server][REQ-BRI
 
 TEST_CASE("Server::close: idempotent and unblocks a live SSE stream promptly",
           "[bridge][rest][server][REQ-BRIDGE-REST-009]") {
-    auto p           = make_participant();
-    auto bridge      = std::make_shared<brest::Bridge>(p, brest::Options{});
-    auto [srv, port] = must_serve(bridge);
+    auto p          = make_participant();
+    auto bridge     = std::make_shared<brest::Bridge>(p, brest::Options{});
+    auto srv_result = must_serve(bridge);
+    auto& srv       = srv_result.first;
+    auto& port      = srv_result.second;
 
     RawSocket conn = raw_dial("127.0.0.1", port);
     REQUIRE(conn >= 0);
