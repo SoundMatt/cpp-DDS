@@ -496,7 +496,30 @@ it:
       only — not yet wired into `dds::adapt()`'s `relay::INode` bridge or the `cpp-dds`
       CLI's `optional_interfaces` capabilities list; that consumption/export layer is
       go-DDS's `monitor`/`admin` equivalent (Tier 5, still deferred).
-- [ ] `IHealthProvider` reporting participant and transport health (same source)
+- [x] `IHealthProvider` reporting participant and transport health (same source: go-DDS's
+      core `dds` package, `dds.go`, implemented by `mock`, `rtps`, and exported by
+      `monitor`/`admin` — Tier 5). **Done (v0.15.0):** `dds::HealthStatus`/`dds::Health`/
+      `dds::IHealthProvider` added to `dds.hpp`, field-for-field mirrors of go-DDS's
+      `dds.go` `HealthStatus`/`Health`/`HealthProvider` (`details` carries both
+      participant- and transport-level state via a free-form JSON string, matching
+      go-DDS's single-struct approach — no separate transport-health type exists in
+      go-DDS either). Implemented by `dds::mock::IMockParticipant` (`dds_health()`
+      mirrors go-DDS's `mock.participant.Health()` exactly, including its
+      `{"state":"closed"}` details string) and `dds::rtps::Participant` (`dds_health()`
+      mirrors go-DDS's `rtps.participant.Health()` exactly, folding live writer/reader
+      counts into `{"writers":N,"readers":N}` while open). Because C++ virtual dispatch
+      cannot have two unrelated base classes both declare a `health()` method with
+      different return types on the same derived class, and `dds::mock::IMockParticipant`
+      already implements `relay::IHealthProvider::health()` (RELAY spec §9.2), the new
+      DDS-package-scoped accessor is named `dds_health()` instead — the same collision
+      and naming precedent as `dds_metrics()` above. 7 new tests (`tests/test_mock.cpp`,
+      `tests/test_rtps_participant.cpp`) cover the interface hierarchy on both
+      participants plus OK/Down transitions and details-string content; verified locally
+      with Release C++17 and a Debug ASan/UBSan pass (304/304 tests), 0 warnings under
+      `-Wall -Wextra -Wpedantic`. Internal/additive only — not yet wired into
+      `dds::adapt()`'s `relay::INode` bridge or the `cpp-dds` CLI's `optional_interfaces`
+      capabilities list; that consumption/export layer is go-DDS's `monitor`/`admin`
+      equivalent (Tier 5, still deferred).
 - [ ] `IDrainer::close_with_drain()` on mock participant
 - [ ] `ILoaningPublisher` (zero-copy loan/commit) backed by a pool allocator;
       `ErrLoanBuffer` for exhausted or mismatched loans (go-DDS: `pool`, 139 LOC)

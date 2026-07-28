@@ -16,7 +16,7 @@
 // fusa:req REQ-MOCK-001 REQ-MOCK-002 REQ-MOCK-003 REQ-MOCK-004 REQ-MOCK-005
 // fusa:req REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003
 // fusa:req REQ-METRICS-004 REQ-METRICS-005 REQ-METRICS-006
-// fusa:req REQ-HEALTH-001 REQ-HEALTH-002
+// fusa:req REQ-HEALTH-001 REQ-HEALTH-002 REQ-HEALTH-003
 // fusa:req REQ-DDS-010 REQ-SEC-004 REQ-SEC-005 REQ-LIFECYCLE-001 REQ-LIFECYCLE-002
 // fusa:req REQ-LIFECYCLE-003 REQ-LIFECYCLE-004 REQ-LIFECYCLE-005
 // fusa:req REQ-SAFETY-001 REQ-SAFETY-002 REQ-SAFETY-003
@@ -457,6 +457,18 @@ public:
             result.push_back(std::move(tm));
         }
         return result;
+    }
+
+    // ── dds::IHealthProvider (DDS-package-scoped; mirrors go-DDS's
+    // dds.HealthProvider) ──────────────────────────────────────────────────
+
+    // Matches go-DDS's mock.participant.Health() verbatim, including the
+    // exact JSON details string on close.
+    // fusa:req REQ-HEALTH-003
+    dds::Health dds_health() const override {
+        if (closed_.load())
+            return dds::Health{dds::HealthStatus::Down, R"({"state":"closed"})"};
+        return dds::Health{dds::HealthStatus::OK, ""};
     }
 
 private:

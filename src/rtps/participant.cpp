@@ -904,6 +904,32 @@ std::vector<TopicMetrics> Participant::topic_metrics() const {
     return result;
 }
 
+// dds_health implements dds::IHealthProvider. Matches go-DDS's
+// rtps.participant.Health() exactly, including the closed/open Details JSON
+// shape (writer/reader counts fold in transport-level health alongside
+// participant-level state, matching go-DDS's "same source" behavior).
+// fusa:req REQ-HEALTH-003
+Health Participant::dds_health() const {
+    if (closed_.load()) {
+        return Health{HealthStatus::Down, R"({"state":"closed"})"};
+    }
+
+    std::size_t num_writers = 0;
+    std::size_t num_readers = 0;
+    {
+        std::lock_guard<std::mutex> lock(writers_mu_);
+        num_writers = writers_.size();
+    }
+    {
+        std::lock_guard<std::mutex> lock(readers_mu_);
+        num_readers = readers_.size();
+    }
+
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), R"({"writers":%zu,"readers":%zu})", num_writers, num_readers);
+    return Health{HealthStatus::OK, buf};
+}
+
 // ── data receive loop ────────────────────────────────────────────────────────
 
 void Participant::start_data_loop() {

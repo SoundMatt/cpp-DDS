@@ -195,6 +195,14 @@
     "standards": ["RELAY spec §9.2"]
   },
   {
+    "id": "REQ-HEALTH-003",
+    "title": "dds::IHealthProvider interface",
+    "text": "Both dds::mock and dds::rtps::Participant shall implement dds::IHealthProvider — the DDS-package-scoped counterpart to relay::IHealthProvider mirroring go-DDS's dds.HealthProvider (dds.go) — exposing a point-in-time participant/transport health snapshot via dds_health(), returning HealthStatus::Down with a JSON-encoded details string once closed and HealthStatus::OK otherwise. dds::rtps::Participant additionally folds live writer/reader counts into the details string when open, matching go-DDS's rtps.participant.Health() exactly.",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["go-DDS dds.go HealthProvider"]
+  },
+  {
     "id": "REQ-SEC-001",
     "title": "Domain boundary enforcement",
     "text": "The system shall reject any domain identifier outside 0–232 inclusive before any object is created, preventing access to out-of-range DDS domains.",
