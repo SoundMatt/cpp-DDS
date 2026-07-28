@@ -4,6 +4,8 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #include <dds/mock/participant.hpp>
+#include <dds/mock/loan.hpp>
+#include <dds/pool/pool.hpp>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -242,6 +244,12 @@ public:
         closed_.store(true);
         return {};
     }
+
+    // is_closed reports whether close() has already run on this publisher
+    // itself (not the owning participant). Used by MockLoaningPublisher's
+    // own loan_buffer closed-check, mirroring rtps::Writer::is_closed()
+    // (src/rtps/participant.cpp) exactly.
+    bool is_closed() const noexcept { return closed_.load(); }
 
 private:
     std::string                           topic_;
@@ -505,6 +513,92 @@ create(Domain domain) {
         return {nullptr, ec};
 
     return {std::make_shared<MockParticipantImpl>(domain), {}};
+}
+
+// ── Loan integration (mock side; "Also within ddscore but not RTPS-
+//    specific" ROADMAP.md item) ─────────────────────────────────────────
+//
+// See mock/loan.hpp for the full file-level scope note. C++ port of
+// go-DDS's mock/loan.go loaningPublisher/NewLoaningPublisher — the same
+// shape as rtps/participant.cpp's own LoaningWriter/new_loaning_publisher
+// (Tier-1 phase 9), wrapping a MockPublisher instead of a Writer.
+
+namespace {
+
+// MockLoaningPublisher wraps a MockPublisher with a dds::pool::BytePool
+// for allocation-free loaned-sample publishing, matching go-DDS's
+// loaningPublisher (which embeds *publisher and adds a *pool.BytePool).
+// write()/close() delegate to the wrapped MockPublisher unchanged — this
+// class adds only loan_buffer/write_loaned/return_loan.
+class MockLoaningPublisher : public ILoaningPublisher {
+public:
+    MockLoaningPublisher(std::shared_ptr<MockPublisher> pub, std::size_t buf_size)
+        : pub_(std::move(pub)), pool_(buf_size) {}
+
+    std::error_code write(const std::vector<uint8_t>& payload) override { return pub_->write(payload); }
+
+    std::error_code write(relay::Context ctx, const std::vector<uint8_t>& payload) override {
+        return pub_->write(ctx, payload);
+    }
+
+    std::error_code close() override { return pub_->close(); }
+
+    // Matches go-DDS's loaningPublisher.Loan: reject on a closed
+    // publisher, then hand out a pool buffer, returning ErrLoanBuffer
+    // (and putting the undersized buffer straight back) if the pool's
+    // configured capacity can't satisfy the request.
+    std::pair<std::vector<uint8_t>*, std::error_code> loan_buffer(std::size_t size) override {
+        if (pub_->is_closed()) return {nullptr, dds::ErrClosed()};
+
+        std::vector<uint8_t>* buf = pool_.get();
+        if (buf->capacity() < size) {
+            pool_.put(buf);
+            return {nullptr, dds::ErrLoanBuffer()};
+        }
+        buf->resize(size);
+        return {buf, {}};
+    }
+
+    // Matches go-DDS's loaningPublisher.Commit: publish, then return the
+    // buffer to the pool regardless of whether the write succeeded (no
+    // validation that buf actually came from this pool — see
+    // mock/loan.hpp's file-level scope note on why that matches go-DDS's
+    // own behavior).
+    std::error_code write_loaned(std::vector<uint8_t>* buf) override {
+        std::error_code err = pub_->write(*buf);
+        pool_.put(buf);
+        return err;
+    }
+
+    // return_loan has no go-DDS LoaningPublisher equivalent (dds.
+    // ILoaningPublisher added it ahead of the RTPS phase that first
+    // implemented the interface, as an explicit discard-without-publish
+    // operation) — trivially returns the buffer to the pool without
+    // writing.
+    void return_loan(std::vector<uint8_t>* buf) override { pool_.put(buf); }
+
+private:
+    std::shared_ptr<MockPublisher> pub_;
+    dds::pool::BytePool            pool_;
+};
+
+} // namespace
+
+std::pair<std::shared_ptr<ILoaningPublisher>, std::error_code>
+new_loaning_publisher(const std::shared_ptr<IParticipant>& p, const std::string& topic, QoS qos,
+                       std::size_t buf_size) {
+    auto [pub, err] = p->new_publisher(topic, qos);
+    if (err) return {nullptr, err};
+
+    // Matches go-DDS's `mpub, ok := pub.(*publisher)` type assertion: any
+    // IParticipant implementation other than dds::mock (whose
+    // new_publisher always returns a MockPublisher) fails this cast.
+    auto mp = std::dynamic_pointer_cast<MockPublisher>(pub);
+    if (!mp) {
+        pub->close();
+        return {nullptr, dds::ErrLoanBuffer()};
+    }
+    return {std::make_shared<MockLoaningPublisher>(std::move(mp), buf_size), std::error_code{}};
 }
 
 } // namespace dds::mock
