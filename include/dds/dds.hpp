@@ -70,8 +70,18 @@ struct QoS {
     int             history_depth{1};
     std::chrono::nanoseconds deadline{0};        // 0 = disabled
     int             max_sample_size{0};          // 0 = unlimited; fusa:req REQ-SEC-002
-    int             transport_priority{0};
-    std::chrono::nanoseconds latency_budget{0};
+    // transport_priority/latency_budget: TSN (Tier 3, "tsn") extensions —
+    // only meaningfully used by dds::rtps::Participant when a TSN-capable
+    // transport is active. transport_priority (0 = normal, 1-7 = elevated)
+    // is a fallback VLAN PCP / SO_PRIORITY selector used only when no
+    // dds::tsn::Stream is configured for a writer's topic (see
+    // ParticipantOptions::tsn_config in rtps/participant.hpp); a matching
+    // Stream's own PCP always takes priority over this field.
+    // latency_budget is purely informational (nothing reads it), matching
+    // go-DDS's dds.go: "Informational in v0.5; future releases may enforce
+    // it via qdisc admission control."
+    int             transport_priority{0};       // fusa:req REQ-TSN-003
+    std::chrono::nanoseconds latency_budget{0};  // fusa:req REQ-TSN-003
     std::chrono::nanoseconds lifespan{0};
     std::chrono::nanoseconds publish_period{0};
 };

@@ -6,6 +6,38 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.22.0] — 2026-07-28
+
+### Added
+
+- `dds::tsn` (`include/dds/tsn/tsn.hpp`, `include/dds/tsn/taprio.hpp`,
+  `include/dds/rtps/tsn.hpp`, `src/tsn/tsn.cpp`, `src/tsn/taprio.cpp`,
+  `src/tsn/taprio_linux.cpp`, `src/tsn/taprio_other.cpp`) — TSN (IEEE 802.1) QoS
+  integration, the fourth and last item of `ROADMAP.md`'s "Tier 3 — xtypes, tsn,
+  idl, cdr" (now fully complete). `dds::tsn::Stream`/`StreamConfig` are a C++
+  port of go-DDS's `tsn/tsn.go`, with `load_config()`/`parse_config()` parsing
+  the identical JSON `tsn_streams` shape via a small internal JSON reader
+  scoped to exactly that config shape. `TAPRIOEntry`/`TAPRIOConfig` (gate
+  control list, `cycle_duration()`/`validate()`/`tc_command()`,
+  `taprio_from_streams()`) are portable; `apply()`/`verify_applied()` program
+  and verify a real Linux `taprio` qdisc via hand-built `RTM_NEWQDISC`/
+  `RTM_GETQDISC` netlink messages — a byte-for-byte port of go-DDS's
+  `tsn/taprio_linux.go` attribute layout — compiled only when
+  `CMAKE_SYSTEM_NAME` is `"Linux"` (mirroring Tier-1 phase 3's
+  `traffic_linux.cpp`/`traffic_other.cpp` split); every other platform gets a
+  documented "requires Linux" diagnostic. `ParticipantOptions::tsn_config`
+  wires a `StreamConfig` into `dds::rtps::Participant`: `new_publisher`
+  resolves each writer's topic against it (falling back to
+  `QoS::transport_priority`, a field that already existed) and routes that
+  writer's remote sends through a dedicated, priority-marked UDP socket via
+  the previously-unused (Tier-1 phase 3) `dds::rtps::traffic.hpp` hooks —
+  `SO_PRIORITY`/`IP_TOS`/`SO_TXTIME`-scheduled transmit for streams with a
+  nonzero `tx_offset`, and the stream's `MaxFragPayload` overriding
+  `fragment.hpp`'s default fragmentation threshold. Verified with 4 new
+  cross-participant real-UDP end-to-end tests plus 45 unit tests — 540/540
+  tests total. `REQ-TSN-001` through `REQ-TSN-007` added, traced and tested.
+  `ROADMAP.md`'s `tsn` bullet checked off.
+
 ## [0.21.0] — 2026-07-27
 
 ### Added

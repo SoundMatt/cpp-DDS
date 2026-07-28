@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(cppdds
-    VERSION 0.21.0
+    VERSION 0.22.0
     DESCRIPTION "C++ DDS library — RELAY-conformant"
     HOMEPAGE_URL "https://github.com/SoundMatt/cpp-DDS"
     LANGUAGES CXX
@@ -60,16 +60,23 @@ add_library(cppdds_lib STATIC
     src/cdr/cdr.cpp
     src/idl/parser.cpp
     src/idl/gen.cpp
+    src/tsn/tsn.cpp
+    src/tsn/taprio.cpp
 )
 
 # Platform-specific socket tuning (SO_PRIORITY / IP_TOS / SO_TXTIME /
 # CLOCK_TAI): mirrors go-DDS's rtps/traffic_linux.go vs. rtps/traffic_other.go
 # `//go:build` split as a translation-unit split rather than an in-file
 # #ifdef (see ROADMAP.md, Tier 1 phase 3, and include/dds/rtps/traffic.hpp).
+#
+# Same split for dds::tsn's TAPRIO netlink integration (ROADMAP.md's Tier 3
+# `tsn` item): src/tsn/taprio_linux.cpp (real RTM_NEWQDISC/RTM_GETQDISC via
+# NETLINK_ROUTE) vs. src/tsn/taprio_other.cpp (portable "not supported"
+# stub) — see include/dds/tsn/taprio.hpp.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_sources(cppdds_lib PRIVATE src/rtps/traffic_linux.cpp)
+    target_sources(cppdds_lib PRIVATE src/rtps/traffic_linux.cpp src/tsn/taprio_linux.cpp)
 else()
-    target_sources(cppdds_lib PRIVATE src/rtps/traffic_other.cpp)
+    target_sources(cppdds_lib PRIVATE src/rtps/traffic_other.cpp src/tsn/taprio_other.cpp)
 endif()
 
 target_include_directories(cppdds_lib

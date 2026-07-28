@@ -20,6 +20,7 @@
 
 #include <dds/pool/pool.hpp>
 #include <dds/rtps/loan.hpp>
+#include <dds/rtps/traffic.hpp>
 
 namespace dds::rtps {
 
@@ -79,8 +80,10 @@ Guid pack_guid(const GUID& g) {
 
 // Builds the wire message(s) for one write of `wrapped` (already
 // CDR-wrapped) payload bytes at sequence number seq_num: a single DATA
-// submessage when small enough to fit under fragment.hpp's
-// kMaxFragmentPayload, or one message per DATA_FRAG fragment otherwise
+// submessage when small enough to fit under frag_size (fragment.hpp's
+// kMaxFragmentPayload by default; a TSN stream's smaller MaxFragPayload
+// when the writer is TSN-configured — Tier 3, "tsn", see
+// Writer::fragment_size), or one message per DATA_FRAG fragment otherwise
 // (Tier-1 phase 8, "Fragmentation" — see fragment.hpp's file-level scope
 // note). Shared by Writer::write and Writer::handle_ack_nack so
 // retransmission fragments exactly like a live write of the same payload
@@ -91,10 +94,12 @@ Guid pack_guid(const GUID& g) {
 // rationale).
 std::vector<std::vector<uint8_t>> build_data_messages(const GuidPrefix& prefix, const EntityId& writer_eid,
                                                         const SequenceNumber& seq_num,
-                                                        const std::vector<uint8_t>& wrapped) {
+                                                        const std::vector<uint8_t>& wrapped,
+                                                        int frag_size = static_cast<int>(kMaxFragmentPayload)) {
     std::vector<std::vector<uint8_t>> msgs;
-    if (wrapped.size() > kMaxFragmentPayload) {
-        auto frags = split_into_fragments(writer_eid, seq_num, wrapped);
+    if (frag_size <= 0) frag_size = static_cast<int>(kMaxFragmentPayload);
+    if (wrapped.size() > static_cast<std::size_t>(frag_size)) {
+        auto frags = split_into_fragments_n(writer_eid, seq_num, wrapped, frag_size);
         msgs.reserve(frags.size());
         for (const auto& frag : frags) {
             std::vector<uint8_t> submsg;
@@ -259,9 +264,10 @@ private:
 // Writer implements dds::IPublisher: best-effort DATA (or DATA_FRAG, for
 // large payloads — Tier-1 phase 8) send to every SEDP-matched remote reader
 // locator plus unconditional local (same-participant) delivery. C++ port of
-// the best-effort subset of go-DDS's rtpsWriter.Write (rtps/participant.go)
-// — see participant.hpp's file-level scope note for what is intentionally
-// not ported (TSN, security).
+// the best-effort subset of go-DDS's rtpsWriter.Write (rtps/participant.go),
+// plus (Tier 3, "tsn") its TSN-socket send-path fields/methods
+// (tsnStream/tsnSock/sendSock/fragmentSize) — see participant.hpp's
+// file-level scope note for what is intentionally not ported (security).
 class Writer : public IPublisher {
 public:
     Writer(std::shared_ptr<Participant> p, std::string topic, EntityId eid, QoS qos, std::size_t history_depth,
@@ -289,6 +295,26 @@ public:
 
     Writer(const Writer&)            = delete;
     Writer& operator=(const Writer&) = delete;
+
+    // Wires this writer to a TSN stream's parameters and dedicated
+    // priority-marked socket (or clears both). Called exactly once,
+    // immediately after construction, from Participant::new_publisher —
+    // matches go-DDS's inline "Wire TSN stream" block in NewPublisher
+    // (Tier 3, "tsn" — see ParticipantOptions::tsn_config's doc comment in
+    // participant.hpp).
+    void configure_tsn(std::optional<TSNParams> stream, UdpSocket* sock) noexcept {
+        tsn_stream_ = stream;
+        tsn_sock_   = sock;
+    }
+
+    // fragment_size returns the per-fragment payload cap for this writer:
+    // a TSN stream's MaxFragPayload when set and nonzero, otherwise
+    // fragment.hpp's default kMaxFragmentPayload. Matches go-DDS's
+    // rtpsWriter.fragmentSize.
+    int fragment_size() const noexcept {
+        if (tsn_stream_ && tsn_stream_->max_frag_payload > 0) return tsn_stream_->max_frag_payload;
+        return static_cast<int>(kMaxFragmentPayload);
+    }
 
     std::error_code write(const std::vector<uint8_t>& payload) override {
         return write(relay::Context::background(), payload);
@@ -323,9 +349,26 @@ public:
         // beyond what build_data_messages already composes from pinned
         // primitives (see participant.hpp's file-level scope note).
         // build_data_messages fragments into DATA_FRAG submessages when the
-        // CDR-wrapped payload exceeds fragment.hpp's kMaxFragmentPayload
-        // (Tier-1 phase 8, "Fragmentation").
-        auto msgs = build_data_messages(p_->guid_prefix(), eid_, seq_num, cdr_wrap_payload(payload));
+        // CDR-wrapped payload exceeds fragment_size() (fragment.hpp's
+        // kMaxFragmentPayload by default, or a TSN stream's smaller
+        // MaxFragPayload — Tier 3, "tsn", Tier-1 phase 8, "Fragmentation").
+        auto msgs = build_data_messages(p_->guid_prefix(), eid_, seq_num, cdr_wrap_payload(payload),
+                                         fragment_size());
+
+        // Scheduled transmit time for a TSN stream with a nonzero
+        // tx_offset (nanoseconds since the TAI epoch; 0 = send
+        // immediately). Matches go-DDS's Write() txTimeNS computation:
+        // next interval boundary (relative to CLOCK_TAI) plus tx_offset.
+        uint64_t tx_time_ns = 0;
+        if (tsn_stream_ && tsn_stream_->tx_offset.count() > 0 && tsn_stream_->interval.count() > 0) {
+            uint64_t tai_now = 0;
+            if (dds::rtps::clock_tai_now(tai_now)) {
+                const auto interval_ns = static_cast<uint64_t>(tsn_stream_->interval.count());
+                const uint64_t since_last = tai_now % interval_ns;
+                tx_time_ns = tai_now + (interval_ns - since_last) +
+                             static_cast<uint64_t>(tsn_stream_->tx_offset.count());
+            }
+        }
 
         // HistoryCache: this writer's sequence-number-indexed retained
         // window. Populated for every writer regardless of QoS (matching
@@ -365,12 +408,15 @@ public:
         // Remote delivery: unicast every message (a single DATA, or every
         // DATA_FRAG fragment) to every SEDP-matched reader locator for this
         // topic. Matches go-DDS's Write() loop order (locator outer,
-        // message inner).
+        // message inner). Routed via send_via, which uses this writer's
+        // dedicated TSN socket (SO_TXTIME-scheduled at tx_time_ns when
+        // nonzero) instead of the shared data_sock_ when configure_tsn was
+        // called with a non-null socket (Tier 3, "tsn").
         for (const auto& loc : p_->sedp().matched_reader_locators_for_topic(topic_)) {
             std::string addr;
             int          port = 0;
             if (locator_to_dest(loc, addr, port)) {
-                for (const auto& m : msgs) p_->send_data(addr, port, m);
+                for (const auto& m : msgs) send_via(addr, port, m, tx_time_ns);
             }
         }
 
@@ -406,7 +452,9 @@ public:
     // Builds and sends a HEARTBEAT to every SEDP-matched reader locator for
     // this topic, advertising the HistoryCache's retained [first, last]
     // span. No-op while the history is empty (nothing to advertise yet).
-    // Matches go-DDS's sendHeartbeatLocked.
+    // Matches go-DDS's sendHeartbeatLocked, including its use of sendSock()
+    // (this writer's dedicated TSN socket when configured — Tier 3, "tsn")
+    // rather than the shared data_sock_.
     void send_heartbeat() {
         if (history_.empty()) return;
         const auto [first, last] = history_.span();
@@ -425,7 +473,7 @@ public:
         for (const auto& loc : p_->sedp().matched_reader_locators_for_topic(topic_)) {
             std::string addr;
             int          port = 0;
-            if (locator_to_dest(loc, addr, port)) p_->send_data(addr, port, msg);
+            if (locator_to_dest(loc, addr, port)) send_via(addr, port, msg);
         }
     }
 
@@ -487,6 +535,26 @@ public:
     }
 
 private:
+    // send_via sends msg to addr:port on this writer's dedicated TSN
+    // socket (tsn_sock_) when configure_tsn set one, scheduling it for
+    // tx_time_ns (nanoseconds since the TAI epoch) via SO_TXTIME when
+    // nonzero — falling back to a plain send when tx_time_ns is 0 or
+    // tsn_sock_'s SO_TXTIME was never enabled (see
+    // dds::rtps::scheduled_send's own fallback). Falls back to the
+    // participant's shared data_sock_ (via Participant::send_data) when
+    // this writer has no dedicated TSN socket at all. Matches go-DDS's
+    // rtpsWriter.sendSock() + the scheduledSend/sendUnicast branch in
+    // Write() (Tier 3, "tsn").
+    bool send_via(const std::string& addr, int port, const std::vector<uint8_t>& msg, uint64_t tx_time_ns = 0) {
+        if (tsn_sock_ != nullptr) {
+            if (tx_time_ns > 0) {
+                return dds::rtps::scheduled_send(*tsn_sock_, addr, port, msg.data(), msg.size(), tx_time_ns);
+            }
+            return tsn_sock_->send_to(addr, port, msg.data(), msg.size());
+        }
+        return p_->send_data(addr, port, msg);
+    }
+
     // Background loop for a reliable writer's periodic HEARTBEAT, matching
     // go-DDS's heartbeatLoop. Shutdown-responsive in kShutdownPollSlice
     // increments, mirroring Participant::bridge_loop's identical pattern.
@@ -517,6 +585,13 @@ private:
     std::atomic<int32_t>            hb_count_{0};
     std::atomic<bool>               hb_running_{false};
     std::thread                      hb_thread_;
+
+    // ── TSN (Tier 3, "tsn") ──────────────────────────────────────────────
+    // nullopt/nullptr when this writer isn't TSN-configured (the common
+    // case) — see configure_tsn's doc comment. Matches go-DDS's
+    // rtpsWriter.tsnStream/tsnSock fields.
+    std::optional<TSNParams> tsn_stream_;
+    UdpSocket*                 tsn_sock_{nullptr}; // non-owning; owned by Participant::tsn_socks_
 };
 
 // ── Participant ────────────────────────────────────────────────────────────
@@ -617,6 +692,7 @@ Participant::create(Domain domain, ParticipantOptions opts) {
                                                                     : std::chrono::milliseconds(200);
     p->heartbeat_period_    = opts.heartbeat_period.count() > 0 ? opts.heartbeat_period : kHeartbeatPeriod;
     p->persist_dir_          = opts.persist_dir;
+    p->tsn_config_           = opts.tsn_config;
     p->data_sock_           = std::move(data_sock);
     p->mcast_sock_v6_       = std::move(mcast_sock_v6);
     p->meta_sock_v6_        = std::move(meta_sock_v6);
@@ -660,9 +736,48 @@ Participant::new_publisher(const std::string& topic, QoS qos) {
     const EntityId eid = entity_id_for_writer(n);
 
     auto w = std::make_shared<Writer>(shared_from_this(), topic, eid, qos, history_depth_, heartbeat_period_);
+
+    // Wire TSN stream (Tier 3, "tsn"): config match takes priority,
+    // QoS::transport_priority acts as a fallback PCP selector when no
+    // config entry exists — matches go-DDS's NewPublisher exactly. See
+    // ParticipantOptions::tsn_config's doc comment.
+    auto [tsn_params, tsn_sock] = resolve_tsn(topic, qos);
+    w->configure_tsn(tsn_params, tsn_sock);
+
     sedp_->register_writer(eid, topic);
     register_writer(eid, w);
     return {w, {}};
+}
+
+// fusa:req REQ-TSN-002 REQ-TSN-003
+std::pair<std::optional<TSNParams>, UdpSocket*> Participant::resolve_tsn(const std::string& topic, const QoS& qos) {
+    TSNParams params;
+    if (tsn_config_ && tsn_config_->stream_for_topic(topic, params)) {
+        return {params, tsn_socket_for_pcp(params.priority, params.dscp, params.tx_offset.count() > 0)};
+    }
+    if (qos.transport_priority > 0) {
+        uint8_t pcp = static_cast<uint8_t>(qos.transport_priority);
+        if (pcp > 7) pcp = 7;
+        return {std::nullopt, tsn_socket_for_pcp(pcp, 0, false)};
+    }
+    return {std::nullopt, nullptr};
+}
+
+// fusa:req REQ-TSN-002
+UdpSocket* Participant::tsn_socket_for_pcp(uint8_t pcp, uint8_t dscp, bool want_tx_time) {
+    std::lock_guard<std::mutex> lock(tsn_mu_);
+    if (auto it = tsn_socks_.find(pcp); it != tsn_socks_.end()) return &it->second;
+
+    // Port 0 -> OS assigns an ephemeral port.
+    auto sock = UdpSocket::bind_unicast(0);
+    if (!sock) return nullptr;
+    dds::rtps::set_sock_priority(*sock, pcp);
+    if (dscp > 0) dds::rtps::set_sock_tos(*sock, dscp);
+    if (want_tx_time) dds::rtps::enable_tx_time(*sock); // best-effort; silently ignored on older kernels / non-Linux
+
+    auto [it, inserted] = tsn_socks_.emplace(pcp, std::move(*sock));
+    (void)inserted;
+    return &it->second;
 }
 
 std::pair<std::shared_ptr<ISubscriber>, std::error_code>
