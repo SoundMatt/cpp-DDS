@@ -379,5 +379,53 @@
     "category": "conformance",
     "criticality": "high",
     "standards": ["RELAY spec §15.7.2"]
+  },
+  {
+    "id": "REQ-E2E-001",
+    "title": "E2E protection wire header format",
+    "text": "dds::safety shall define an 18-byte, little-endian E2E protection header — DataID (uint16, bytes 0-1), SourceID (uint16, bytes 2-3), SequenceCounter (uint32, bytes 4-7), Timestamp (int64 Unix nanoseconds, bytes 8-15), CRC-16/CCITT-FALSE (uint16, bytes 16-17, computed with the CRC slot treated as zero) — byte-for-byte identical to go-DDS's safety/e2e.go, verified against independently derived reference vectors.",
+    "category": "conformance",
+    "criticality": "high",
+    "standards": ["go-DDS safety/e2e.go"]
+  },
+  {
+    "id": "REQ-E2E-002",
+    "title": "E2EPublisher prepends protection header",
+    "text": "dds::safety::E2EPublisher shall wrap a dds::IPublisher and prepend the REQ-E2E-001 header to every payload before writing, with a per-publisher SequenceCounter that starts at 1 and increments monotonically on each write, thread-safe under concurrent write() calls (REQ-SAFETY-001).",
+    "category": "safety",
+    "criticality": "high",
+    "standards": ["go-DDS safety/e2e.go E2EPublisher", "ISO 26262 ASIL-B §5.4.7"]
+  },
+  {
+    "id": "REQ-E2E-003",
+    "title": "E2ESubscriber CRC validation",
+    "text": "dds::safety::E2ESubscriber shall strip the REQ-E2E-001 header from every received sample and validate its CRC-16/CCITT-FALSE checksum; on mismatch it shall report E2EErrorKind::CRCMismatch via errors() and MUST NOT forward the sample to channel().",
+    "category": "safety",
+    "criticality": "high",
+    "standards": ["go-DDS safety/e2e.go E2ESubscriber", "ISO 26262 ASIL-B §5.4.7"]
+  },
+  {
+    "id": "REQ-E2E-004",
+    "title": "E2ESubscriber sequence gap detection",
+    "text": "dds::safety::E2ESubscriber shall detect gaps in the received SequenceCounter (any value other than the immediately preceding counter + 1) and report E2EErrorKind::SequenceGap via errors(); the sample MUST still be forwarded to channel() despite the gap.",
+    "category": "safety",
+    "criticality": "medium",
+    "standards": ["go-DDS safety/e2e.go E2ESubscriber"]
+  },
+  {
+    "id": "REQ-E2E-005",
+    "title": "E2ESubscriber freshness (staleness) check",
+    "text": "When E2EConfig::max_age is non-zero, dds::safety::E2ESubscriber shall compute sample age as (now - header Timestamp) and report E2EErrorKind::StaleSample via errors() (without forwarding to channel()) when age exceeds max_age. When max_age is zero, freshness checking is disabled and samples of any age are forwarded.",
+    "category": "safety",
+    "criticality": "high",
+    "standards": ["go-DDS safety/e2e.go E2ESubscriber", "ISO 26262 ASIL-B §7.4.11"]
+  },
+  {
+    "id": "REQ-E2E-006",
+    "title": "E2ESubscriber short-payload rejection",
+    "text": "dds::safety::E2ESubscriber shall report E2EErrorKind::HeaderTooShort via errors() (without forwarding to channel() or attempting CRC/sequence/freshness validation) whenever a received sample's payload is shorter than the 18-byte REQ-E2E-001 header.",
+    "category": "safety",
+    "criticality": "high",
+    "standards": ["go-DDS safety/e2e.go E2ESubscriber"]
   }
 ]
