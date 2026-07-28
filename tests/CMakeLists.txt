@@ -2,6 +2,7 @@ add_executable(cppdds_tests
     test_relay.cpp
     test_dds.cpp
     test_mock.cpp
+    test_mock_loan.cpp
     test_pool.cpp
     test_rtps_types.cpp
     test_rtps_cdr.cpp

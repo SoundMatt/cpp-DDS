@@ -3,21 +3,29 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-// Behavioral tests for dds::pool::BytePool (Tier-1 phase 9, "Loan
-// integration" — see ROADMAP.md and include/dds/pool/pool.hpp's file-level
-// scope note). Test cases mirror go-DDS's pool/pool_test.go BytePool
-// coverage (TestBytePool_*): capacity/length invariants on a fresh Get,
-// reuse after Put, undersized-buffer discard, zero/negative-size
-// defaulting, no-reallocation-within-capacity, and concurrent use.
+// Behavioral tests for dds::pool::BytePool and dds::pool::SampleBuffer.
+// BytePool coverage dates to Tier-1 phase 9, "Loan integration"; SampleBuffer
+// coverage is new for the "Also within ddscore but not RTPS-specific"
+// ROADMAP.md `ILoaningPublisher` item (see include/dds/pool/pool.hpp's
+// file-level scope note). Both mirror go-DDS's pool/pool_test.go coverage
+// (TestBytePool_*/TestSampleBuffer_*) exactly: BytePool's capacity/length
+// invariants on a fresh Get, reuse after Put, undersized-buffer discard,
+// zero/negative-size defaulting, no-reallocation-within-capacity, and
+// concurrent use; SampleBuffer's push/pop round-trip, pop-on-empty,
+// push-on-full, wraparound ordering, len tracking, cap reporting,
+// zero-size defaulting, and concurrent push/pop.
 
 #include <dds/pool/pool.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
+#include <string>
 #include <thread>
 #include <vector>
 
 using dds::pool::BytePool;
+using dds::pool::SampleBuffer;
 
 TEST_CASE("BytePool::get returns a zero-length buffer with sufficient capacity", "[pool]") {
     BytePool bp(512);
@@ -95,4 +103,111 @@ TEST_CASE("BytePool is safe under concurrent get/put", "[pool]") {
         });
     }
     for (auto& t : threads) t.join();
+}
+
+// ── SampleBuffer ─────────────────────────────────────────────────────────────
+
+TEST_CASE("SampleBuffer::push then pop round-trips a sample", "[pool]") {
+    SampleBuffer sb(4);
+    dds::Sample  s;
+    s.topic   = "t";
+    s.payload = {'p'};
+    CHECK(sb.push(s));
+
+    auto got = sb.pop();
+    REQUIRE(got.has_value());
+    CHECK(got->topic == "t");
+    CHECK(got->payload == std::vector<uint8_t>{'p'});
+}
+
+TEST_CASE("SampleBuffer::pop on an empty buffer returns nullopt", "[pool]") {
+    SampleBuffer sb(4);
+    CHECK_FALSE(sb.pop().has_value());
+}
+
+TEST_CASE("SampleBuffer::push on a full buffer returns false", "[pool]") {
+    SampleBuffer sb(2);
+    CHECK(sb.push(dds::Sample{}));
+    CHECK(sb.push(dds::Sample{}));
+    CHECK_FALSE(sb.push(dds::Sample{}));
+}
+
+TEST_CASE("SampleBuffer preserves FIFO order across wraparound", "[pool]") {
+    SampleBuffer sb(3);
+    for (int i = 0; i < 3; ++i) {
+        dds::Sample s;
+        s.topic = "t" + std::to_string(i);
+        REQUIRE(sb.push(s));
+    }
+    sb.pop();                                      // head moves to 1
+    dds::Sample s3;
+    s3.topic = "t3";
+    REQUIRE(sb.push(s3));                          // tail wraps to 0
+
+    const std::vector<std::string> expected{"t1", "t2", "t3"};
+    for (const auto& want : expected) {
+        auto got = sb.pop();
+        REQUIRE(got.has_value());
+        CHECK(got->topic == want);
+    }
+}
+
+TEST_CASE("SampleBuffer::len tracks the number of held samples", "[pool]") {
+    SampleBuffer sb(8);
+    CHECK(sb.len() == 0);
+    sb.push(dds::Sample{});
+    CHECK(sb.len() == 1);
+    sb.pop();
+    CHECK(sb.len() == 0);
+}
+
+TEST_CASE("SampleBuffer::cap reports the configured capacity", "[pool]") {
+    SampleBuffer sb(16);
+    CHECK(sb.cap() == 16);
+}
+
+TEST_CASE("SampleBuffer defaults a zero or negative-equivalent capacity to 64", "[pool]") {
+    SampleBuffer sb(0);
+    CHECK(sb.cap() == 64);
+}
+
+TEST_CASE("SampleBuffer: full then drain returns samples in push order", "[pool]") {
+    constexpr std::size_t kCap = 4;
+    SampleBuffer          sb(kCap);
+    for (std::size_t i = 0; i < kCap; ++i) {
+        dds::Sample s;
+        s.topic = "s" + std::to_string(i);
+        REQUIRE(sb.push(s));
+    }
+    for (std::size_t i = 0; i < kCap; ++i) {
+        auto got = sb.pop();
+        REQUIRE(got.has_value());
+        CHECK(got->topic == "s" + std::to_string(i));
+    }
+    CHECK_FALSE(sb.pop().has_value());
+}
+
+TEST_CASE("SampleBuffer is safe under concurrent push/pop", "[pool]") {
+    SampleBuffer sb(128);
+
+    std::vector<std::thread> producers;
+    producers.reserve(10);
+    for (int i = 0; i < 10; ++i) {
+        producers.emplace_back([&sb] {
+            for (int j = 0; j < 10; ++j) {
+                dds::Sample s;
+                s.topic = "concurrent";
+                sb.push(s);
+            }
+        });
+    }
+    std::atomic<bool> stop{false};
+    std::thread       consumer([&sb, &stop] {
+        while (!stop.load()) {
+            sb.pop();
+        }
+    });
+    for (auto& t : producers) t.join();
+    stop.store(true);
+    consumer.join();
 }

@@ -3,26 +3,31 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-// dds/pool/pool.hpp — BytePool, a fixed-capacity byte-buffer allocator used
-// to back zero-copy loaned-sample publishing (dds::ILoaningPublisher,
-// RELAY spec §8.3).
+// dds/pool/pool.hpp — BytePool and SampleBuffer, the allocation-efficient
+// data structures backing zero-copy loaned-sample publishing
+// (dds::ILoaningPublisher, RELAY spec §8.3) and bounded sample staging.
 //
-// C++ port of the BytePool portion of github.com/SoundMatt/go-DDS's
-// pool/pool.go (139 LOC total). go-DDS's BytePool wraps sync.Pool, a
-// goroutine-safe free list of GC-tracked []byte slices; this header ports
-// the same Get/Put semantics (a zero-length, pre-allocated buffer handed
-// out on Get, truncated-and-recycled on Put, undersized buffers discarded)
-// over a mutex-guarded free list of owned std::vector<uint8_t> objects.
+// C++ port of github.com/SoundMatt/go-DDS's pool/pool.go (139 LOC total).
+// go-DDS's BytePool wraps sync.Pool, a goroutine-safe free list of
+// GC-tracked []byte slices; this header ports the same Get/Put semantics
+// (a zero-length, pre-allocated buffer handed out on Get,
+// truncated-and-recycled on Put, undersized buffers discarded) over a
+// mutex-guarded free list of owned std::vector<uint8_t> objects.
 //
-// Scope: this file ports only BytePool, the piece Tier-1 phase 9 ("Loan
-// integration", see ROADMAP.md and rtps/loan.hpp) needs to back
-// dds::ILoaningPublisher::loan_buffer/write_loaned/return_loan. go-DDS's
-// pool.go also defines SampleBuffer (a fixed-capacity ring buffer of
-// dds.Sample values, for staging received samples) — that has no bearing
-// on loaned *writes* and is left for the separate, not-yet-scheduled
-// ddscore roadmap item ("`ILoaningPublisher` ... backed by a pool
-// allocator", the "Also within ddscore but not RTPS-specific" list in
-// ROADMAP.md) if/when something actually needs it.
+// SampleBuffer ports go-DDS's fixed-capacity concurrent ring buffer of
+// dds.Sample values (for staging received samples between a subscriber
+// channel and an application processing loop) over a mutex-guarded
+// std::vector<dds::Sample> ring, matching Push/Pop/Len/Cap semantics
+// exactly. This is the "Also within ddscore but not RTPS-specific" list's
+// `ILoaningPublisher` item's other half (see ROADMAP.md) — Tier-1 phase 9
+// ("Loan integration") only needed BytePool, which is why this file
+// originally ported only that piece; SampleBuffer was left for this item,
+// which is the "if/when something actually needs it" this file's own
+// prior scope note anticipated (the mock-participant-backed
+// ILoaningPublisher in dds/mock/loan.hpp does not itself need
+// SampleBuffer either — it reuses BytePool exactly as the RTPS side does
+// — but this header is where go-DDS's own pool.go keeps both types
+// together, so the C++ port follows suit for this item's completion).
 //
 // Ownership note (a genuine divergence from go-DDS, forced by the
 // interface shape dds::ILoaningPublisher already committed to before this
@@ -34,14 +39,19 @@
 // calls write_loaned/return_loan (BytePool::put) leaks that buffer for the
 // life of the pool, exactly as any other manually-managed C++ resource
 // would. This is inherent to the pointer-based interface shape, not a
-// choice made in this file.
+// choice made in this file. SampleBuffer has no such divergence: Push/Pop
+// operate purely by value (dds::Sample, matching go-DDS's dds.Sample),
+// so there is no pointer-ownership question to resolve.
 
 #pragma once
 
 #include <cstddef>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
+
+#include <dds/dds.hpp>
 
 namespace dds::pool {
 
@@ -100,6 +110,66 @@ private:
     std::size_t size_;
     std::mutex  mu_;
     std::vector<std::unique_ptr<std::vector<uint8_t>>> free_;
+};
+
+// SampleBuffer is a fixed-capacity concurrent ring buffer of dds::Sample
+// values. It provides bounded, allocation-free queuing suitable for use as
+// a staging area between a subscriber channel and an application
+// processing loop running at a different rate. Thread-safe. C++ port of
+// go-DDS's pool.SampleBuffer.
+class SampleBuffer {
+public:
+    // Buffers obtained via SampleBuffer(capacity) hold at most capacity
+    // samples (capacity <= 0 defaults to 64, matching go-DDS's
+    // NewSampleBuffer(0)/NewSampleBuffer(-1) behavior).
+    explicit SampleBuffer(std::size_t capacity = 0)
+        : cap_(capacity > 0 ? capacity : kDefaultCapacity), buf_(cap_) {}
+
+    ~SampleBuffer() = default;
+
+    SampleBuffer(const SampleBuffer&)            = delete;
+    SampleBuffer& operator=(const SampleBuffer&) = delete;
+
+    // push adds s to the ring buffer. Returns false if the buffer is full.
+    bool push(const Sample& s) {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (len_ == cap_) return false;
+        buf_[tail_] = s;
+        tail_ = (tail_ + 1) % cap_;
+        ++len_;
+        return true;
+    }
+
+    // pop removes and returns the oldest sample. Returns nullopt if the
+    // buffer is empty.
+    std::optional<Sample> pop() {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (len_ == 0) return std::nullopt;
+        Sample s = std::move(buf_[head_]);
+        buf_[head_] = Sample{}; // release payload storage, matching go-DDS's GC-release comment
+        head_ = (head_ + 1) % cap_;
+        --len_;
+        return s;
+    }
+
+    // len returns the number of samples currently held in the buffer.
+    std::size_t len() const {
+        std::lock_guard<std::mutex> lock(mu_);
+        return len_;
+    }
+
+    // cap returns the buffer's maximum capacity.
+    std::size_t cap() const noexcept { return cap_; }
+
+private:
+    static constexpr std::size_t kDefaultCapacity = 64;
+
+    std::size_t         cap_;
+    std::vector<Sample> buf_;
+    std::size_t         head_{0};
+    std::size_t         tail_{0};
+    std::size_t         len_{0};
+    mutable std::mutex  mu_;
 };
 
 } // namespace dds::pool

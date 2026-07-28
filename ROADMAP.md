@@ -521,8 +521,45 @@ it:
       capabilities list; that consumption/export layer is go-DDS's `monitor`/`admin`
       equivalent (Tier 5, still deferred).
 - [ ] `IDrainer::close_with_drain()` on mock participant
-- [ ] `ILoaningPublisher` (zero-copy loan/commit) backed by a pool allocator;
-      `ErrLoanBuffer` for exhausted or mismatched loans (go-DDS: `pool`, 139 LOC)
+- [x] `ILoaningPublisher` (zero-copy loan/commit) backed by a pool allocator;
+      `ErrLoanBuffer` for exhausted or mismatched loans (go-DDS: `pool`, 139 LOC).
+      **Done:** Tier-1 phase 9 ("Loan integration", v0.12.0) implemented
+      `dds::ILoaningPublisher` once already, but scoped to the RTPS writer path only
+      (`dds::rtps::new_loaning_publisher`/`LoaningWriter`) and ported only the
+      `BytePool` half of go-DDS's `pool/pool.go` — this item completes both remaining
+      pieces. `include/dds/pool/pool.hpp` gains `dds::pool::SampleBuffer`, a
+      thread-safe fixed-capacity ring buffer of `dds::Sample` values, a C++ port of
+      `pool.go`'s `SampleBuffer` (Push/Pop/Len/Cap ported as push/pop/len/cap,
+      operating purely by value with no ownership divergence from go-DDS, unlike
+      `BytePool`). New `include/dds/mock/loan.hpp` declares
+      `dds::mock::new_loaning_publisher(participant, topic, qos, buf_size)`, a C++
+      port of go-DDS's `mock/loan.go` `NewLoaningPublisher`; its
+      `MockLoaningPublisher` implementation lives in `src/mock/participant.cpp`
+      alongside `MockPublisher`, the one translation unit where that `.cpp`-local
+      type is visible — the same translation-unit-boundary precedent
+      `rtps/loan.hpp`/`participant.cpp` established for the RTPS side. Mirrors
+      `LoaningWriter` exactly: `loan_buffer` rejects on a closed publisher (a new
+      `MockPublisher::is_closed()` accessor) or an oversized request
+      (`ErrLoanBuffer`), `write_loaned` calls the same `MockPublisher::write` every
+      plain mock publisher uses and returns the buffer to the pool, `return_loan`
+      discards a buffer without publishing, and `new_loaning_publisher` rejects a
+      non-mock participant with `ErrLoanBuffer` (matching go-DDS's `mpub, ok :=
+      pub.(*publisher)` type-assertion failure) or propagates `new_publisher`'s own
+      error (e.g. `ErrClosed`) — matching go-DDS's `mock.loaningPublisher`/
+      `NewLoaningPublisher` exactly, including its "no ownership validation on
+      Commit" behavior. Verified with 9 new `SampleBuffer` behavioral unit tests
+      (push/pop round-trip, pop-on-empty, push-on-full, wraparound ordering, len
+      tracking, cap reporting, zero-size defaulting, full-then-drain, concurrency —
+      mirroring go-DDS's own `pool_test.go` `TestSampleBuffer_*` coverage) plus 7 new
+      mock-loan-integration tests (`tests/test_mock_loan.cpp`) covering same-process
+      loan/commit round-tripping, pool exhaustion, closed-publisher rejection,
+      discard-without-publish, direct `write()` passthrough, and the two
+      go-DDS-mirrored `NewLoaningPublisher` error paths — 320/320 tests, verified
+      locally with Release C++17/C++20 builds and a Debug ASan/UBSan pass on
+      macOS/AppleClang; CI additionally exercises Linux/gcc-12 ASan+UBSan. Scope:
+      internal, additive — `dds::mock::new_loaning_publisher` is NOT wired into
+      `dds::adapt()` or any automatic-transport-selection surface, matching the RTPS
+      side's own precedent.
 - [ ] `dds/auto/` — automatic transport selection (shmem first, fall back to RTPS/UDP;
       go-DDS `auto`, 129 LOC) — only meaningful once both shmem and RTPS exist, so this
       is naturally a late Tier-1-adjacent item
