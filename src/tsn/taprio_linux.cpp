@@ -25,9 +25,9 @@
 #include <unistd.h>
 
 // <linux/netlink.h> supplies `struct sockaddr_nl` and `NETLINK_ROUTE`;
-// present on any Linux dev system (part of linux-libc-dev, a transitive
-// dependency of libc6-dev). AF_NETLINK/SOCK_RAW/SOCK_CLOEXEC come from
-// <sys/socket.h>.
+// available on every Linux development host as part of linux-libc-dev, a
+// transitive dependency of libc6-dev. AF_NETLINK/SOCK_RAW/SOCK_CLOEXEC
+// come from <sys/socket.h>.
 #include <linux/netlink.h>
 
 namespace dds::tsn {
