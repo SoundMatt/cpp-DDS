@@ -6,6 +6,39 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.25.0] — 2026-07-28
+
+### Added
+
+- `dds::bridge::rest` (`include/dds/bridge/rest/{rest.hpp,transport.hpp}`,
+  `src/bridge/rest/{rest.cpp,transport.cpp}`) — an HTTP/SSE gateway bridging a
+  `dds::IParticipant` to HTTP clients, the third and last item of `ROADMAP.md`'s
+  "Tier 4 — bridges" and a C++ port of go-DDS's `bridge/rest` package. Landed as a
+  third member of `cppdds_bridges`. `GET /topics` returns a JSON array of
+  currently-subscribed topic names, `GET /topics/{topic}` opens a Server-Sent Events
+  stream of samples on that topic, and `POST /topics/{topic}` publishes the request
+  body as one sample. Split like the grpc bridge: `rest.hpp`/`rest.cpp` are pure
+  business logic (JSON/SSE codec, `classify_request` routing, `Bridge`'s lazy
+  subscriber/publisher caching, and `run_sse_loop`/`handle_publish` against an
+  abstract `SseSink` — unit-testable with an in-memory double, no networking);
+  `transport.hpp`/`transport.cpp` hand-roll a genuinely valid HTTP/1.1
+  request/response parser+writer over raw TCP sockets — Content-Length-framed unary
+  responses plus `Transfer-Encoding: chunked` for the SSE stream — verified
+  byte-exact against a real go-DDS process's actual wire bytes (captured via a raw
+  `net.Dial`, not `net/http`'s de-chunking client). `topics_to_json()` and the SSE
+  `"id: <n>\nevent: message\ndata: <base64>\n\n"` / `": keepalive\n\n"` formats are
+  verified against reference vectors captured from a real go-DDS process, including
+  go's actual `Options.keepalive()` behavior (an explicit zero does not disable the
+  keepalive, despite its doc comment's claim otherwise). `classify_request`
+  reproduces go's `strings.TrimPrefix`-based `ServeHTTP` routing byte-for-byte,
+  including its documented quirks. One documented, low-risk departure from a literal
+  port: an oversized publish body (over the 16 MiB cap) is rejected with 400 rather
+  than silently truncated (go's own behavior), matching every other wire boundary in
+  this repo. Verified with 48 new tests (`tests/test_bridge_rest.cpp`) — 665/665
+  tests total. `REQ-BRIDGE-REST-001` through `REQ-BRIDGE-REST-009` added, traced and
+  tested. `ROADMAP.md`'s `rest` bullet checked off — Tier 4 (`grpc`, `wan`, `rest`)
+  is now complete.
+
 ## [0.24.0] — 2026-07-28
 
 ### Added

@@ -34,7 +34,7 @@ add_executable(cppdds_tests
 # is being built — CPPDDS_BUILD_BRIDGES is ON by default alongside
 # CPPDDS_BUILD_TESTS, but each option is independently toggleable.
 if(CPPDDS_BUILD_BRIDGES)
-    target_sources(cppdds_tests PRIVATE test_bridge_grpc.cpp test_bridge_wan.cpp)
+    target_sources(cppdds_tests PRIVATE test_bridge_grpc.cpp test_bridge_wan.cpp test_bridge_rest.cpp)
 endif()
 
 target_link_libraries(cppdds_tests
