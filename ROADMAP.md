@@ -615,7 +615,61 @@ it:
 
 ## Tier 3 — xtypes, tsn, idl, cdr (v0.4.0)
 
-- **`xtypes`** — DDS-XTypes Dynamic Data support (go-DDS `xtypes/`, 460 LOC).
+- [x] **`xtypes`** — DDS-XTypes Dynamic Data support (go-DDS `xtypes/`, 460 LOC).
+  **Done (v0.19.0):** `include/dds/xtypes/xtypes.hpp` + `src/xtypes/xtypes.cpp` —
+  a faithful C++ port of go-DDS's `tools/xtypes/xtypes.go`: `TypeKind`/
+  `FieldDescriptor`/`TypeDescriptor` (the type-descriptor model), `identify()`
+  (content-addressed `TypeIdentifier`, order-independent over field
+  declaration), `TypeObject`/`new_type_object()`, `DynamicData` (schema-
+  validated property map with `to_json()`/`from_json()`), `TypeRegistry`
+  (thread-safe, name-keyed, `ErrTypeMismatch` on structural conflict), and
+  `check_compatibility()` (forward/backward schema-evolution rules).
+  `TypeIdentifier::hash` is SHA-256 over a canonical JSON encoding of the
+  descriptor, verified byte-for-byte against reference vectors independently
+  derived from a fresh go-DDS clone (calling go-DDS's actual unexported
+  `canonical()`/`canonicalField()`/`Identify()` functions directly, per this
+  repo's established white-box vector-derivation convention) — including Go's
+  default HTML-safe JSON string-escaping rule, confirmed against real go-DDS
+  output rather than assumed. No external crypto dependency is fetched for
+  this project, so SHA-256 is implemented from scratch under
+  `src/xtypes/detail/` (an internal, non-public detail, independent of
+  `dds::security`'s own scratch SHA-256 — that header is explicitly scoped to
+  `security.cpp` only) — verified against FIPS 180-4 known-answer vectors and,
+  end-to-end, against the go-DDS-derived hashes above. `DynamicData::from_json`
+  fully parses and syntactically validates the entire input document before
+  applying any field (matching go-DDS's `json.Unmarshal(&raw map[string]
+  json.RawMessage)` up-front-parse behavior exactly, including failing under a
+  malformed value hidden behind an unknown/skipped key) via a small internal
+  recursive-descent JSON reader; unknown fields are silently skipped (forward
+  compatibility) and JSON numbers always decode to `Value::Kind::Double`
+  regardless of textual shape, matching Go's `json.Unmarshal`-into-`any`
+  behavior exactly. Two deliberate, documented scope decisions vs. go-DDS's
+  untyped `any`: nested JSON object/array values are syntactically validated
+  but not stored, even under a declared field name (`dds::xtypes::Value` does
+  not model arbitrary nesting — go-DDS's own test suite never exercises nested
+  `DynamicData` field values either); and `Value::of_bytes()` follows Go's
+  real, asymmetric `[]byte` JSON quirk faithfully — `to_json()` emits
+  base64 (matching Go's marshal special-case for `[]byte`) but `from_json()`
+  has no corresponding decode path (matching Go's `json.Unmarshal`-into-`any`,
+  which never re-derives `[]byte` from a base64 string either). Not wired into
+  RTPS discovery or `dds::adapt()` — this item's roadmap scope is the
+  standalone type system and dynamic-data package only, matching every prior
+  Tier-2/Tier-1-adjacent internal-library port's own precedent (`dds::safety`,
+  `dds::security`). Verified with 36 new tests (`tests/test_xtypes.cpp`) —
+  byte-exact canonical-JSON/hash reference-vector tests (mirroring
+  `test_rtps_cdr.cpp`'s/`test_safety_e2e.cpp`'s derivation convention) plus
+  full behavioral parity with go-DDS's own `xtypes_test.go` test matrix
+  (`TypeKind.String`, `Identify` determinism/field-order-independence/
+  struct/seq hashing, `NewTypeObject`, `DynamicData` set/get/JSON round-trip/
+  unknown-field forward-compat/malformed-input rejection, `TypeRegistry`
+  register/lookup/idempotent-re-registration/name-conflict/sorted snapshot,
+  `CheckCompatibility`'s five rule cases) — 417/417 tests total, verified
+  locally with Release C++17/C++20 builds (the new files additionally
+  compiled warning-clean under a genuine `-std=c++20` invocation directly,
+  per phase 6's precedent for this repo's C++20 CI-leg quirk) and a Debug
+  ASan/UBSan pass on macOS/AppleClang; CI additionally exercises Linux/gcc-12
+  ASan+UBSan. `REQ-XTYPE-001`..`006` and `REQ-TREG-001`..`003` added, traced
+  and tested.
 - **`cdr`** — full XCDR1 encode/decode per OMG DDS-XTypes 1.3, for arbitrary
   IDL-defined user payload types (go-DDS `cdr/`, 348 LOC incl. tests) — general-purpose,
   and deliberately separate from Tier 1's discovery-only CDR subset (see Tier 1 phase 2).

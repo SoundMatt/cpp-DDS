@@ -499,5 +499,77 @@
     "category": "security",
     "criticality": "high",
     "standards": ["go-DDS security/replay.go ReplayGuard", "NIST SP 800-53 SC-23", "ISO 26262 ASIL-B §5.4.7"]
+  },
+  {
+    "id": "REQ-XTYPE-001",
+    "title": "XTypes type-descriptor model",
+    "text": "dds::xtypes shall define TypeKind (Bool, Int32, Int64, Float64, String, Bytes, Struct, Seq), FieldDescriptor (name, kind, optional, nested fields for Struct, element descriptor for Seq), and TypeDescriptor (name, version, top-level fields), field-for-field mirrors of go-DDS's xtypes.TypeKind/FieldDescriptor/TypeDescriptor.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": ["go-DDS tools/xtypes/xtypes.go", "OMG DDS-XTypes 1.3"]
+  },
+  {
+    "id": "REQ-XTYPE-002",
+    "title": "Content-addressed TypeIdentifier",
+    "text": "dds::xtypes::identify(td) shall compute a TypeIdentifier whose hash is the first 8 bytes of SHA-256 over a canonical JSON encoding of td, byte-for-byte identical to go-DDS's xtypes.Identify()/canonical() output (compact encoding, map keys sorted lexicographically, Go's default HTML-safe string escaping), verified against reference vectors independently derived from a fresh go-DDS clone; two descriptors that differ only in field declaration order shall produce identical TypeIdentifiers, and any difference in name, field name, kind, optional flag, nested field, or sequence element shall produce a different hash.",
+    "category": "conformance",
+    "criticality": "high",
+    "standards": ["go-DDS tools/xtypes/xtypes.go Identify"]
+  },
+  {
+    "id": "REQ-XTYPE-003",
+    "title": "DynamicData schema-validated field access",
+    "text": "dds::xtypes::DynamicData::set(name, value) shall return ErrUnknownField when name is not declared among the backing TypeDescriptor's top-level fields, and shall otherwise store value; DynamicData::get(name) shall return an empty result for a declared-but-unset field, distinct from a field that has never been declared at all.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": ["go-DDS tools/xtypes/xtypes.go DynamicData"]
+  },
+  {
+    "id": "REQ-XTYPE-004",
+    "title": "DynamicData JSON serialization and forward compatibility",
+    "text": "DynamicData::to_json() shall serialise all set fields to a compact JSON object; DynamicData::from_json(text) shall fully parse and syntactically validate the entire input document before applying any field (a malformed value anywhere fails the whole call, even under an unknown key), shall silently skip (not store) any key not declared in the backing TypeDescriptor (forward compatibility), shall decode JSON numbers as double-precision values regardless of their textual shape (matching Go's json.Unmarshal-into-`any` behavior of always producing float64), and shall return ErrInvalidJSON for malformed input or a non-object top-level value.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": ["go-DDS tools/xtypes/xtypes.go DynamicData.ToJSON/FromJSON"]
+  },
+  {
+    "id": "REQ-XTYPE-005",
+    "title": "TypeObject construction",
+    "text": "dds::xtypes::new_type_object(td) shall return a TypeObject pairing td with identify(td), computing the identifier automatically.",
+    "category": "functional",
+    "criticality": "low",
+    "standards": ["go-DDS tools/xtypes/xtypes.go NewTypeObject"]
+  },
+  {
+    "id": "REQ-XTYPE-006",
+    "title": "Type-evolution compatibility checking",
+    "text": "dds::xtypes::check_compatibility(writer_td, reader_td) shall report compatible=true when every reader field either exists in the writer with the same TypeKind or is absent from the writer but marked Optional in the reader; it shall report compatible=false (with a human-readable reason) when a required reader field is absent from the writer or when a shared field's TypeKind differs between writer and reader; fields present in the writer but absent from the reader shall never cause incompatibility.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": ["go-DDS tools/xtypes/xtypes.go CheckCompatibility", "OMG DDS-XTypes 1.3 §7.2.2 (type consistency)"]
+  },
+  {
+    "id": "REQ-TREG-001",
+    "title": "TypeRegistry store and lookup",
+    "text": "dds::xtypes::TypeRegistry::register_type(to) shall store to keyed by to->id.name; TypeRegistry::lookup(name) shall return the stored TypeObject for a registered name or nullptr for an unregistered one.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": ["go-DDS tools/xtypes/xtypes.go TypeRegistry.Register/Lookup"]
+  },
+  {
+    "id": "REQ-TREG-002",
+    "title": "TypeRegistry name-conflict detection",
+    "text": "TypeRegistry::register_type(to) shall return ErrTypeMismatch when a TypeObject with the same name but a different content-addressed hash is already registered, and shall be a no-op (success) when the same TypeObject (same name and hash) is registered again.",
+    "category": "conformance",
+    "criticality": "high",
+    "standards": ["go-DDS tools/xtypes/xtypes.go ErrTypeMismatch"]
+  },
+  {
+    "id": "REQ-TREG-003",
+    "title": "TypeRegistry snapshot and thread safety",
+    "text": "TypeRegistry::all() shall return a snapshot of every registered TypeObject sorted by name; TypeRegistry shall be safe for concurrent register_type()/lookup()/all() calls from multiple threads.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": ["go-DDS tools/xtypes/xtypes.go TypeRegistry.All"]
   }
 ]

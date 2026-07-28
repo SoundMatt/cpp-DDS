@@ -6,6 +6,39 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.19.0] — 2026-07-27
+
+### Added
+
+- `dds::xtypes` (`include/dds/xtypes/xtypes.hpp`, `src/xtypes/xtypes.cpp`) —
+  DDS-XTypes Dynamic Data support, a faithful C++ port of go-DDS's
+  `tools/xtypes/xtypes.go`, the first item of `ROADMAP.md`'s "Tier 3 —
+  xtypes, tsn, idl, cdr". `TypeKind`/`FieldDescriptor`/`TypeDescriptor`
+  describe a runtime schema; `identify()` derives a content-addressed
+  `TypeIdentifier` (SHA-256 over a canonical JSON encoding, order-independent
+  over field declaration) byte-for-byte identical to go-DDS's, verified
+  against reference vectors independently derived from a fresh go-DDS clone
+  including Go's HTML-safe JSON string-escaping rule; `DynamicData` is a
+  schema-validated property map with JSON serialization (unknown fields
+  skipped on read for forward compatibility, matching go-DDS exactly);
+  `TypeRegistry` is a thread-safe name-keyed store with structural-conflict
+  detection (`ErrTypeMismatch`); `check_compatibility()` implements the
+  standard forward/backward schema-evolution rules.
+- No external crypto dependency is fetched for this project, so SHA-256 is
+  implemented from scratch under `src/xtypes/detail/` (independent of
+  `dds::security`'s own scratch SHA-256, which is explicitly scoped to
+  `security.cpp` only) and verified against FIPS 180-4 known-answer vectors.
+- 36 new tests (`tests/test_xtypes.cpp`) — 417/417 total. Adds
+  `REQ-XTYPE-001` through `REQ-XTYPE-006` and `REQ-TREG-001` through
+  `REQ-TREG-003`, traced and tested.
+
+Verified locally: Release C++17/C++20 builds clean (the new files
+additionally compiled warning-clean under a genuine `-std=c++20` invocation
+directly), ctest 417/417, Debug ASan+UBSan pass on macOS/AppleClang.
+ROADMAP.md checked off.
+
+---
+
 ## [0.18.0] — 2026-07-27
 
 ### Added
