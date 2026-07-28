@@ -6,6 +6,42 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.12.0] — 2026-07-27
+
+### Added
+
+- RTPS Tier-1 sub-phase 9 (see `ROADMAP.md`, "Tier 1 — RTPS wire protocol",
+  phase 9 "Loan integration"): zero-copy loaned-sample publishing wired into
+  the RTPS writer path, backed by a pool allocator.
+- `include/dds/pool/pool.hpp` (header-only): `dds::pool::BytePool`, a
+  thread-safe fixed-capacity byte-buffer allocator — a C++ port of the
+  `BytePool` portion of go-DDS's `pool/pool.go`.
+- `include/dds/rtps/loan.hpp`: `dds::rtps::new_loaning_publisher`, a C++
+  port of go-DDS's `rtps/loan.go` `NewLoaningPublisher`; its
+  `LoaningWriter` implementation of `dds::ILoaningPublisher` (already
+  declared in `dds.hpp` ahead of this phase) lives in
+  `src/rtps/participant.cpp`, wrapping a `Writer` with a `BytePool` for
+  `loan_buffer`/`write_loaned`/`return_loan`. Introduces no new wire
+  encoding — `write_loaned` calls the same already byte-verified
+  `Writer::write` every plain publisher uses.
+- Verified with `BytePool` behavioral unit tests
+  (`tests/test_pool.cpp`, mirroring go-DDS's own `pool_test.go` coverage)
+  and loan-integration tests (`tests/test_rtps_loan.cpp`) covering
+  same-process round-tripping, pool exhaustion, closed-writer rejection,
+  discard-without-publish, direct `write()` passthrough, both
+  go-DDS-mirrored `NewLoaningPublisher` error paths, and an end-to-end test
+  over real loopback UDP once SEDP-matched — 279/279 total. Verified
+  locally with Release C++17/C++20 builds (plus the new files additionally
+  compiled warning-clean under a genuine `-std=c++20` invocation) and a
+  Debug ASan+UBSan pass on macOS/AppleClang; CI additionally exercises
+  Linux/gcc-12 ASan+UBSan.
+- Scope: internal to `cppdds_lib` — `new_loaning_publisher` is not wired
+  into `dds::adapt()` or any automatic-transport-selection surface, and a
+  mock-participant-backed `ILoaningPublisher` implementation remains a
+  separate, still-unchecked roadmap item.
+
+---
+
 ## [0.11.0] — 2026-07-27
 
 ### Added

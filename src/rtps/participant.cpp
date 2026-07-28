@@ -9,9 +9,17 @@
 // github.com/SoundMatt/go-DDS rtps/participant.go. See
 // include/dds/rtps/participant.hpp for the phase scope and the deliberate
 // deviations from a literal line-for-line port.
+//
+// Also implements Tier-1 phase 9 ("Loan integration", rtps/loan.hpp) —
+// LoaningWriter and new_loaning_publisher live here, not in a separate
+// loan.cpp, because they need the concrete (.cpp-local) Writer type; see
+// loan.hpp's file-level scope note.
 
 #include <algorithm>
 #include <cstdio>
+
+#include <dds/pool/pool.hpp>
+#include <dds/rtps/loan.hpp>
 
 namespace dds::rtps {
 
@@ -340,6 +348,14 @@ public:
         p_->unregister_writer(eid_);
         return {};
     }
+
+    // is_closed reports whether close() has already run. Used by
+    // LoaningWriter::loan_buffer (Tier-1 phase 9) to reject new loans
+    // against a closed writer, matching go-DDS's loaningWriter.Loan()
+    // checking rtpsWriter.closed directly (see loan.hpp's file-level scope
+    // note on why that direct-field-access pattern becomes a public
+    // accessor here instead).
+    bool is_closed() const noexcept { return closed_.load(); }
 
     // ── reliable delivery (Tier-1 phase 7) ──────────────────────────────
 
@@ -967,6 +983,87 @@ void Participant::sync_peers() {
 
     for (const auto& proxy : new_peers) sedp_->on_new_peer(proxy);
     for (const auto& prefix : evicted_prefixes) sedp_->on_peer_evicted(prefix);
+}
+
+// ── Loan integration (Tier-1 phase 9) ────────────────────────────────────────
+//
+// See rtps/loan.hpp for the full file-level scope note. C++ port of
+// go-DDS's rtps/loan.go loaningWriter/NewLoaningPublisher.
+
+namespace {
+
+// LoaningWriter wraps a Writer with a dds::pool::BytePool for
+// allocation-free loaned-sample publishing, matching go-DDS's
+// loaningWriter (which embeds *rtpsWriter and adds a *pool.BytePool).
+// write()/close() delegate to the wrapped Writer unchanged — this class
+// adds only loan_buffer/write_loaned/return_loan.
+class LoaningWriter : public ILoaningPublisher {
+public:
+    LoaningWriter(std::shared_ptr<Writer> w, std::size_t buf_size)
+        : w_(std::move(w)), pool_(buf_size) {}
+
+    std::error_code write(const std::vector<uint8_t>& payload) override { return w_->write(payload); }
+
+    std::error_code write(relay::Context ctx, const std::vector<uint8_t>& payload) override {
+        return w_->write(ctx, payload);
+    }
+
+    std::error_code close() override { return w_->close(); }
+
+    // Matches go-DDS's loaningWriter.Loan: reject on a closed writer, then
+    // hand out a pool buffer, returning ErrLoanBuffer (and putting the
+    // undersized buffer straight back) if the pool's configured capacity
+    // can't satisfy the request.
+    std::pair<std::vector<uint8_t>*, std::error_code> loan_buffer(std::size_t size) override {
+        if (w_->is_closed()) return {nullptr, dds::ErrClosed()};
+
+        std::vector<uint8_t>* buf = pool_.get();
+        if (buf->capacity() < size) {
+            pool_.put(buf);
+            return {nullptr, dds::ErrLoanBuffer()};
+        }
+        buf->resize(size);
+        return {buf, {}};
+    }
+
+    // Matches go-DDS's loaningWriter.Commit: publish, then return the
+    // buffer to the pool regardless of whether the write succeeded (no
+    // validation that buf actually came from this pool — see loan.hpp's
+    // file-level scope note on why that matches go-DDS's own behavior).
+    std::error_code write_loaned(std::vector<uint8_t>* buf) override {
+        std::error_code err = w_->write(*buf);
+        pool_.put(buf);
+        return err;
+    }
+
+    // return_loan has no go-DDS LoaningPublisher equivalent (dds.
+    // ILoaningPublisher added it ahead of this phase as an explicit
+    // discard-without-publish operation) — trivially returns the buffer to
+    // the pool without writing.
+    void return_loan(std::vector<uint8_t>* buf) override { pool_.put(buf); }
+
+private:
+    std::shared_ptr<Writer> w_;
+    dds::pool::BytePool     pool_;
+};
+
+} // namespace
+
+std::pair<std::shared_ptr<ILoaningPublisher>, std::error_code>
+new_loaning_publisher(const std::shared_ptr<IParticipant>& p, const std::string& topic, QoS qos,
+                       std::size_t buf_size) {
+    auto [pub, err] = p->new_publisher(topic, qos);
+    if (err) return {nullptr, err};
+
+    // Matches go-DDS's `rw, ok := pub.(*rtpsWriter)` type assertion: any
+    // IParticipant implementation other than dds::rtps::Participant (whose
+    // new_publisher always returns a Writer) fails this cast.
+    auto w = std::dynamic_pointer_cast<Writer>(pub);
+    if (!w) {
+        pub->close();
+        return {nullptr, dds::ErrLoanBuffer()};
+    }
+    return {std::make_shared<LoaningWriter>(std::move(w), buf_size), std::error_code{}};
 }
 
 } // namespace dds::rtps

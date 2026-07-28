@@ -339,10 +339,48 @@ buildable and testable against go-DDS's file of the same concern):
    ASan+UBSan. Internal to `cppdds_lib`, under `dds/rtps/` — not yet wired into
    `dds::IParticipant`'s public surface beyond `dds::rtps::Participant` itself, nor
    into any automatic-transport-selection surface.
-9. **Loan integration** (stretch, can slip to a `v0.2.x` point release without blocking
+9. [x] **Loan integration** (stretch, can slip to a `v0.2.x` point release without blocking
    the rest of Tier 1) — zero-copy loaned-sample publishing wired into the RTPS writer
    path, backed by a pool allocator. Reference: `loan.go` (66 LOC); pairs with the
-   `pool`/`ILoaningPublisher` work below.
+   `pool`/`ILoaningPublisher` work below. **Done (v0.12.0):** new
+   `include/dds/pool/pool.hpp` (header-only): `dds::pool::BytePool`, a thread-safe
+   fixed-capacity byte-buffer allocator — a C++ port of the `BytePool` portion of
+   go-DDS's `pool/pool.go` (139 LOC; `SampleBuffer`, the other half of that file, is
+   left for the separate, still-unchecked ddscore item below since loaned *writes*
+   don't need it). New `include/dds/rtps/loan.hpp` declares
+   `dds::rtps::new_loaning_publisher(participant, topic, qos, buf_size)`, a C++ port
+   of go-DDS's `rtps/loan.go` `NewLoaningPublisher`; its `LoaningWriter`
+   implementation of `dds::ILoaningPublisher` (`dds.hpp`'s pre-existing interface —
+   see the ddscore item below) lives in `src/rtps/participant.cpp` alongside `Writer`,
+   the one translation unit where that `.cpp`-local type is visible (see loan.hpp's
+   file-level scope note for why this deviates from a literal separate-file port).
+   `LoaningWriter::loan_buffer`/`write_loaned`/`return_loan` wrap a `Writer` plus a
+   `BytePool`: `loan_buffer` rejects on a closed writer (a new `Writer::is_closed()`
+   accessor) or an oversized request (`ErrLoanBuffer`), `write_loaned` calls the same
+   already byte-verified `Writer::write` every plain publisher uses and returns the
+   buffer to the pool, and `return_loan` discards a buffer without publishing —
+   matching go-DDS's `loaningWriter.Loan`/`Commit` exactly, including its "no
+   ownership validation on Commit" behavior (a documented caller contract, not
+   enforced code, in both the Go and C++ interfaces). This phase introduces no new
+   wire encoding: `write_loaned` composes only already-verified primitives, so a
+   loaned publish is byte-identical on the wire to a plain `Writer::write` of the
+   same payload. Verified with `BytePool` behavioral unit tests (capacity/reuse/
+   undersized-discard/default-sizing/no-reallocation/concurrency, mirroring go-DDS's
+   own `pool_test.go` coverage) plus loan-integration tests covering same-process
+   loan/commit round-tripping, pool exhaustion, closed-writer rejection,
+   discard-without-publish, direct `write()` passthrough, the two go-DDS-mirrored
+   `NewLoaningPublisher` error paths (wrong participant type, publisher-creation
+   failure), and an end-to-end test driving a loaned publish across two real
+   `Participant`s over real loopback UDP once SEDP-matched — 279/279 tests, verified
+   locally with Release C++17/C++20 builds (plus the new files additionally compiled
+   warning-clean under a genuine `-std=c++20` invocation directly, per phase 6's
+   precedent for this repo's C++20 CI-leg quirk) and a Debug ASan/UBSan pass on
+   macOS/AppleClang; CI additionally exercises Linux/gcc-12 ASan+UBSan. Scope:
+   internal, additive — `new_loaning_publisher` is NOT wired into `dds::adapt()` or
+   any automatic-transport-selection surface, matching every prior RTPS phase; a
+   mock-participant-backed `ILoaningPublisher` implementation remains out of scope
+   here (see the still-unchecked ddscore item immediately below, which this phase
+   only partially advances).
 10. **IPv6 / wildcard locators** (best-effort, non-gating) — go-DDS's own docs flag IPv6
     transport as having "limited interop testing"; treat cpp-DDS's IPv6 support the same
     way — implement it, don't gate a release on it.
@@ -359,8 +397,10 @@ delivery, since reliable QoS depends on phase 6's scaffolding):
 (Actual tags diverged from this original `v0.2.x` suggestion once phase 1 landed —
 each phase shipped as its own incrementing `v0.MINOR.0` release instead:
 v0.3.0=phase 1, v0.4.0=phase 2, v0.5.0=phase 3, v0.6.0=phase 4, v0.7.0=phase 5,
-v0.8.0=phase 6, v0.9.0=phase 7, v0.10.0=phase 8 — see each phase's own
-"Done (vX.Y.0)" note above.)
+v0.8.0=phase 6, v0.9.0=phase 7, v0.10.0=phase 8, v0.12.0=phase 9 — see each phase's
+own "Done (vX.Y.0)" note above. v0.11.0 landed RTPS wire-level interop testing
+infrastructure, a cross-cutting need rather than a numbered roadmap phase — see
+that release's own CHANGELOG.md entry.)
 
 Also within `ddscore` but not RTPS-specific, carried forward from the previous roadmap
 draft and small enough to slot in opportunistically alongside Tier 1 rather than blocking

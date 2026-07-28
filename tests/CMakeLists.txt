@@ -2,6 +2,7 @@ add_executable(cppdds_tests
     test_relay.cpp
     test_dds.cpp
     test_mock.cpp
+    test_pool.cpp
     test_rtps_types.cpp
     test_rtps_cdr.cpp
     test_rtps_transport.cpp
@@ -12,6 +13,7 @@ add_executable(cppdds_tests
     test_rtps_participant.cpp
     test_rtps_reliable.cpp
     test_rtps_fragment.cpp
+    test_rtps_loan.cpp
 )
 
 target_link_libraries(cppdds_tests
