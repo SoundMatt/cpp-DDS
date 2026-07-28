@@ -6,6 +6,40 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.10.0] — 2026-07-27
+
+### Added
+
+- RTPS Tier-1 sub-phase 8 (see `ROADMAP.md`, "Tier 1 — RTPS wire protocol",
+  phase 8 "Fragmentation"): `DataFrag` submessage type added to
+  `include/dds/rtps/types.hpp` + `src/rtps/types.cpp`, verified
+  byte-for-byte against go-DDS reference vectors in the new
+  `tests/test_rtps_fragment.cpp`.
+- `include/dds/rtps/fragment.hpp` (header-only): `dds::rtps::FragmentAssembler`
+  (receive-side reassembly) and `split_into_fragments`/`split_into_fragments_n`
+  (send-side splitting) — a C++ port of go-DDS's `fragment.go`.
+- `dds::rtps::Participant`'s `Writer::write` now fragments a CDR-wrapped
+  payload over `kMaxFragmentPayload` into DATA_FRAG submessages;
+  `Writer::handle_ack_nack` re-fragments from `HistoryCache` on
+  ACKNACK-triggered retransmit (a correctness improvement over go-DDS's own
+  first-fragment-only retransmit limitation); `Participant::handle_data_packet`
+  reassembles incoming DATA_FRAG submessages via a new `frag_assembler_`
+  member and dispatches the completed sample — completing the round trip
+  even though go-DDS's own `participant.go` never wires its own
+  `fragmentAssembler` into an equivalent receive path.
+- Verified with byte-exact `DataFrag`/`split_into_fragments_n` reference-vector
+  tests, `FragmentAssembler` behavioral unit tests, and two end-to-end tests
+  driving a real `Participant` over real loopback UDP (264/264 total).
+  Verified locally with Release C++17/C++20 builds (plus the new files
+  additionally compiled warning-clean under a genuine `-std=c++20`
+  invocation) and a Debug ASan+UBSan pass on macOS/AppleClang; CI
+  additionally exercises Linux/gcc-12 ASan+UBSan.
+- Scope: internal to `cppdds_lib`, under `dds/rtps/` — not yet wired into
+  `dds::IParticipant`'s public surface beyond `dds::rtps::Participant`
+  itself, nor into any automatic-transport-selection surface.
+
+---
+
 ## [0.9.0] — 2026-07-27
 
 ### Added

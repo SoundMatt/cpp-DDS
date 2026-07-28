@@ -22,9 +22,13 @@
 // Scope: RELAY spec QoS::reliability == Reliable now gets real
 // HEARTBEAT-after-write-and-periodic / ACKNACK-on-gap / retransmit-from-
 // history delivery (RTPS 2.3 §8.4.9-§8.4.12) — see reliable.hpp and
-// persist.hpp for that phase's own scope notes. Still out of scope: no
-// fragmentation (phase 8), no loan integration (phase 9), no IPv6
-// (phase 10), no security/TSN (Tier 2/3), no INFO_TS-carried publish
+// persist.hpp for that phase's own scope notes. Writes whose CDR-wrapped
+// payload exceeds fragment.hpp's kMaxFragmentPayload are now split into
+// DATA_FRAG submessages on send and reassembled on receive (Tier-1 phase 8,
+// "Fragmentation" — see fragment.hpp's own file-level scope note for the
+// full detail, including the write/retransmit/receive wiring). Still out of
+// scope: no loan integration (phase 9), no IPv6 (phase 10), no
+// security/TSN (Tier 2/3), no INFO_TS-carried publish
 // timestamps (Sample::timestamp is always the local wall-clock time of
 // publish/receipt — every wire primitive this phase composes — DataSubmessage,
 // cdr_wrap_payload, wrap_in_rtps_message, Heartbeat/AckNack/Gap::encode —
@@ -120,6 +124,7 @@
 #include <vector>
 
 #include <dds/dds.hpp>
+#include <dds/rtps/fragment.hpp>
 #include <dds/rtps/history_cache.hpp>
 #include <dds/rtps/persist.hpp>
 #include <dds/rtps/reliable.hpp>
@@ -287,6 +292,11 @@ private:
     std::string persist_dir_;
 
     UdpSocket data_sock_;
+
+    // Reassembles incoming DATA_FRAG submessages (Tier-1 phase 8) — see
+    // fragment.hpp's file-level scope note for why this is wired into the
+    // receive path even though go-DDS's own participant.go never does.
+    FragmentAssembler frag_assembler_;
 
     std::unique_ptr<SpdpService> spdp_;
     std::unique_ptr<SedpService> sedp_;
