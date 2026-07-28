@@ -31,8 +31,14 @@
 // dds::pool::BytePool for zero-copy loaned-sample publishing (Tier-1
 // phase 9, "Loan integration") — its LoaningWriter implementation lives in
 // this file's .cpp (participant.cpp), the one place the .cpp-local Writer
-// type is visible; see loan.hpp's own file-level scope note. Still out of
-// scope: no IPv6 (phase 10), no
+// type is visible; see loan.hpp's own file-level scope note.
+// ParticipantOptions::ipv6 (Tier-1 phase 10, "IPv6 / wildcard locators" —
+// best-effort, non-gating) opts into an additional pair of IPv6 UDP
+// sockets, mirroring go-DDS's WithIPv6() exactly, including its shallow
+// integration depth: only the user-data socket is wired into the receive
+// path, and outbound replies still always go via the IPv4 socket — see
+// this file's own scope note below and transport.hpp's file-level note for
+// the full detail. Still out of scope: no
 // security/TSN (Tier 2/3), no INFO_TS-carried publish
 // timestamps (Sample::timestamp is always the local wall-clock time of
 // publish/receipt — every wire primitive this phase composes — DataSubmessage,
@@ -44,8 +50,10 @@
 // C++ port of the entity-lifecycle, best-effort-dispatch, and
 // reliable-delivery portions of github.com/SoundMatt/go-DDS's
 // rtps/participant.go (`participant`, `rtpsWriter`, `rtpsReader` and their
-// methods) plus rtps/reliable.go and rtps/persist.go — the TSN-socket,
-// security-plugin, anti-replay, and IPv6 portions of participant.go remain
+// methods) plus rtps/reliable.go and rtps/persist.go, plus (Tier-1 phase
+// 10) the `ipv6`-flag portion of participant.go's option handling and
+// newParticipant's "Optional IPv6 sockets" block — the TSN-socket,
+// security-plugin, and anti-replay portions of participant.go remain
 // explicitly out of scope here; see the roadmap phase list for where each
 // lands. Also out of scope: go-DDS's `waitDrain`/`CloseWithDrain`
 // (blocking until all writes are ACKed) — not required by this phase's
@@ -54,6 +62,37 @@
 //
 // Scope notes (deliberate deviations from a literal line-for-line port):
 //
+//   - ParticipantOptions::ipv6 (default false) mirrors go-DDS's
+//     WithIPv6() option exactly, including its depth: when set, three
+//     additional IPv6 sockets are bound at the same port numbers the IPv4
+//     sockets use (meta_multicast_port/meta_unicast_port/data_unicast_port
+//     — a UDP port number is scoped per address family, so this is not a
+//     collision) — an SPDP-multicast-receive socket and a SEDP-meta-
+//     unicast socket that are bound only (matching go-DDS's mcastSockV6/
+//     metaSockV6, which newParticipant binds but never wires into any
+//     receive path — discovery stays IPv4-only), and a user-data unicast
+//     socket that *is* wired into the data receive loop (matching
+//     go-DDS's dataSockV6, which dataReceiveLoop fans into the same
+//     handleDataPacket as the IPv4 socket). Every IPv6 bind failure is
+//     soft (participant creation still succeeds IPv4-only), matching
+//     go-DDS's "Optional IPv6 sockets. Failures are soft" comment
+//     verbatim. Outbound sends — replies, retransmits, ACKNACK/HEARTBEAT
+//     — always go via the IPv4 `data_sock_`/`Writer` locator-directed
+//     sends, even for a packet that arrived via the IPv6 socket: this is
+//     not an oversight, it is a faithful port of go-DDS's own
+//     participant.go, where every one of handleDataPacket's/
+//     handleAckNack's/handleHeartbeat's replies unconditionally calls
+//     `p.dataSock.send(...)` (never `p.dataSockV6`), and go-DDS's own
+//     docs (rtps.go: "IPv6 transport is supported via WithIPv6 but has
+//     had limited interop testing") acknowledge this is exactly that kind
+//     of limitation. SPDP/SEDP discovery and Locator advertisement
+//     (buildParticipantData / build_endpoint_data) remain IPv4-only on
+//     both sides for the same reason: go-DDS itself never advertises a
+//     UDPv6-kind Locator, so a peer would have no way to learn this
+//     participant's IPv6 address even if this port invented one. See
+//     transport.hpp's file-level scope note for the socket-primitive side
+//     of this (UdpSocket::bind_unicast_v6 / bind_multicast_receive_v6)
+//     and ROADMAP.md phase 10's "Done" note for the full rationale.
 //   - go-DDS's participant owns and shares a single `metaSock` between SPDP
 //     announcement sends and SEDP send/receive. Because dds::rtps::UdpSocket
 //     is move-only (one owner), this port gives SpdpService its own
@@ -172,6 +211,14 @@ struct ParticipantOptions {
     // persist.hpp). Empty (the default) disables persistence entirely —
     // matches go-DDS's WithPersistentHistory(dir) option, dir == "" no-op.
     std::string persist_dir;
+
+    // Opts into an additional pair of IPv6 UDP sockets (Tier-1 phase 10,
+    // "IPv6 / wildcard locators" — best-effort, non-gating). Mirrors
+    // go-DDS's WithIPv6() option, including its scope: see this file's own
+    // file-level scope note for exactly what is and isn't wired up when
+    // this is set. Every OS-level IPv6 bind failure under this flag is
+    // soft — participant creation still succeeds with IPv4 only.
+    bool ipv6{false};
 };
 
 // Participant is a working dds::IParticipant backed by real RTPS/UDP:
@@ -217,6 +264,14 @@ public:
     SpdpService& spdp() noexcept { return *spdp_; }
     SedpService& sedp() noexcept { return *sedp_; }
     bool is_closed() const noexcept { return closed_.load(); }
+
+    // True when ParticipantOptions::ipv6 was set AND at least the IPv6
+    // user-data socket bound successfully (the only IPv6 socket whose
+    // presence has an observable behavioral effect — see the file-level
+    // scope note). False whenever ipv6 wasn't requested or every IPv6 bind
+    // attempt failed (soft failure, matching go-DDS).
+    bool ipv6_enabled() const noexcept { return data_sock_v6_.valid(); }
+    int  data_unicast_port_v6() const noexcept { return data_sock_v6_.valid() ? data_sock_v6_.port() : 0; }
 
 private:
     friend class Writer;
@@ -281,6 +336,16 @@ private:
     void data_loop();
     void handle_data_packet(const std::vector<uint8_t>& data, const std::string& from_address, int from_port);
 
+    // IPv6 user-data receive loop (Tier-1 phase 10). Only started when
+    // data_sock_v6_ bound successfully; feeds the exact same
+    // handle_data_packet as data_loop(), matching go-DDS's
+    // dataReceiveLoop fanning both dataSock and dataSockV6 into
+    // handleDataPacket. See the file-level scope note for what this does
+    // and does not enable (receive-only; replies still go via IPv4).
+    void start_data_loop_v6();
+    void stop_data_loop_v6();
+    void data_loop_v6();
+
     void start_bridge_loop();
     void stop_bridge_loop();
     void bridge_loop();
@@ -297,6 +362,15 @@ private:
     std::string persist_dir_;
 
     UdpSocket data_sock_;
+
+    // IPv6 sockets (Tier-1 phase 10), valid() only when
+    // ParticipantOptions::ipv6 was set and the corresponding OS-level bind
+    // succeeded. mcast_sock_v6_/meta_sock_v6_ are bound-but-unconsumed,
+    // matching go-DDS's mcastSockV6/metaSockV6 — see the file-level scope
+    // note. data_sock_v6_ feeds data_loop_v6().
+    UdpSocket mcast_sock_v6_;
+    UdpSocket meta_sock_v6_;
+    UdpSocket data_sock_v6_;
 
     // Reassembles incoming DATA_FRAG submessages (Tier-1 phase 8) — see
     // fragment.hpp's file-level scope note for why this is wired into the
@@ -333,6 +407,9 @@ private:
 
     std::atomic<bool> data_running_{false};
     std::thread        data_thread_;
+
+    std::atomic<bool> data_running_v6_{false};
+    std::thread        data_thread_v6_;
 };
 
 } // namespace dds::rtps

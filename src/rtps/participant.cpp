@@ -30,14 +30,37 @@ namespace {
 // rather than shared, matching sedp.cpp's own copy of the same helper
 // (spdp.cpp/sedp.cpp already established this duplication pattern for
 // small address-formatting helpers in this codebase).
+// Also handles UDPv6-kind locators (Tier-1 phase 10) — formatted as
+// uncompressed colon-hex, valid UdpSocket::send_to input (see
+// transport.cpp's format_ipv6, which this mirrors). No wire-format change:
+// Locator itself has always decoded UDPv6-kind values correctly (byte-
+// verified since phase 1/2 — see tests/test_rtps_types.cpp); this is
+// purely address-string formatting for the send path. In practice this
+// branch is not currently reachable from a real go-DDS peer, which never
+// advertises a UDPv6-kind Locator over SEDP (see participant.hpp's
+// file-level scope note) — it exists for any wire-conformant peer that
+// does, and for symmetry with Locator's own generality.
 bool locator_to_dest(const Locator& l, std::string& addr_out, int& port_out) {
-    if (l.kind != Locator::kKindUDPv4) return false;
-    char buf[16];
-    std::snprintf(buf, sizeof(buf), "%u.%u.%u.%u", l.address[12], l.address[13], l.address[14],
-                  l.address[15]);
-    addr_out = buf;
-    port_out = static_cast<int>(l.port);
-    return true;
+    if (l.kind == Locator::kKindUDPv4) {
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%u.%u.%u.%u", l.address[12], l.address[13], l.address[14],
+                      l.address[15]);
+        addr_out = buf;
+        port_out = static_cast<int>(l.port);
+        return true;
+    }
+    if (l.kind == Locator::kKindUDPv6) {
+        char buf[48];
+        std::snprintf(buf, sizeof(buf), "%x:%x:%x:%x:%x:%x:%x:%x",
+                      (l.address[0] << 8) | l.address[1], (l.address[2] << 8) | l.address[3],
+                      (l.address[4] << 8) | l.address[5], (l.address[6] << 8) | l.address[7],
+                      (l.address[8] << 8) | l.address[9], (l.address[10] << 8) | l.address[11],
+                      (l.address[12] << 8) | l.address[13], (l.address[14] << 8) | l.address[15]);
+        addr_out = buf;
+        port_out = static_cast<int>(l.port);
+        return true;
+    }
+    return false;
 }
 
 // Packs an rtps::GUID (prefix || entity) into the dds::Guid wire shape used
@@ -491,6 +514,7 @@ Participant::create(Domain domain, ParticipantOptions opts) {
     UdpSocket spdp_recv_sock;
     int        meta_port = 0;
     int        data_port = 0;
+    int        participant_idx = 0; // used to re-derive matching IPv6 port numbers below
 
     if (opts.test_mode) {
         auto s1 = UdpSocket::bind_unicast(0);
@@ -522,6 +546,7 @@ Participant::create(Domain domain, ParticipantOptions opts) {
             data_sock = std::move(*s2);
             meta_port  = sedp_sock.port();
             data_port   = data_sock.port();
+            participant_idx = i;
             bound       = true;
         }
         if (!bound) return {nullptr, relay::ErrNotConnected()};
@@ -535,6 +560,34 @@ Participant::create(Domain domain, ParticipantOptions opts) {
         spdp_recv_sock = std::move(*s4);
     }
 
+    // Optional IPv6 sockets (Tier-1 phase 10). Every failure here is soft
+    // (participant creation still succeeds IPv4-only), matching go-DDS's
+    // "Optional IPv6 sockets. Failures are soft" comment in newParticipant
+    // verbatim — see participant.hpp's file-level scope note for exactly
+    // what mcast_sock_v6/meta_sock_v6 (bound-but-unconsumed) and
+    // data_sock_v6 (wired into data_loop_v6) do and don't enable.
+    UdpSocket mcast_sock_v6;
+    UdpSocket meta_sock_v6;
+    UdpSocket data_sock_v6;
+    if (opts.ipv6) {
+        if (opts.test_mode) {
+            if (auto s = UdpSocket::bind_unicast_v6(0)) mcast_sock_v6 = std::move(*s);
+            if (auto s = UdpSocket::bind_unicast_v6(0)) meta_sock_v6 = std::move(*s);
+            if (auto s = UdpSocket::bind_unicast_v6(0)) data_sock_v6 = std::move(*s);
+        } else {
+            if (auto s = UdpSocket::bind_multicast_receive_v6(kSpdpMulticastAddrV6,
+                                                                dds::rtps::meta_multicast_port(domain))) {
+                mcast_sock_v6 = std::move(*s);
+            }
+            if (auto s = UdpSocket::bind_unicast_v6(dds::rtps::meta_unicast_port(domain, participant_idx))) {
+                meta_sock_v6 = std::move(*s);
+            }
+            if (auto s = UdpSocket::bind_unicast_v6(dds::rtps::data_unicast_port(domain, participant_idx))) {
+                data_sock_v6 = std::move(*s);
+            }
+        }
+    }
+
     auto p = std::shared_ptr<Participant>(new Participant());
     p->domain_             = domain;
     p->guid_prefix_        = new_guid_prefix();
@@ -546,6 +599,9 @@ Participant::create(Domain domain, ParticipantOptions opts) {
     p->heartbeat_period_    = opts.heartbeat_period.count() > 0 ? opts.heartbeat_period : kHeartbeatPeriod;
     p->persist_dir_          = opts.persist_dir;
     p->data_sock_           = std::move(data_sock);
+    p->mcast_sock_v6_       = std::move(mcast_sock_v6);
+    p->meta_sock_v6_        = std::move(meta_sock_v6);
+    p->data_sock_v6_        = std::move(data_sock_v6);
 
     SpdpConfig spdp_cfg;
     spdp_cfg.domain                      = domain;
@@ -570,6 +626,7 @@ Participant::create(Domain domain, ParticipantOptions opts) {
     p->spdp_->start();
     p->sedp_->start();
     p->start_data_loop();
+    p->start_data_loop_v6(); // no-op if data_sock_v6_ didn't bind (see above)
     p->start_bridge_loop();
 
     return {p, {}};
@@ -653,9 +710,13 @@ std::error_code Participant::close() {
 
     stop_bridge_loop();
     stop_data_loop();
+    stop_data_loop_v6();
     if (spdp_) spdp_->stop();
     if (sedp_) sedp_->stop();
     data_sock_.close();
+    mcast_sock_v6_.close();
+    meta_sock_v6_.close();
+    data_sock_v6_.close();
 
     std::vector<std::shared_ptr<Reader>> readers;
     {
@@ -763,6 +824,35 @@ void Participant::data_loop() {
         // receive_loop's identical pattern).
         auto pkt = data_sock_.recv();
         if (!data_running_.load(std::memory_order_relaxed)) return;
+        if (!pkt) continue;
+        handle_data_packet(pkt->data, pkt->from_address, pkt->from_port);
+    }
+}
+
+// ── IPv6 data receive loop (Tier-1 phase 10) ────────────────────────────────
+// Mirrors data_loop() exactly, reading from data_sock_v6_ instead of
+// data_sock_ but feeding the same handle_data_packet — matching go-DDS's
+// dataReceiveLoop fan-in of dataSock and dataSockV6 into one
+// handleDataPacket. See participant.hpp's file-level scope note: this is
+// receive-only — any reply handle_data_packet triggers still goes out via
+// the IPv4 data_sock_ (send_data), matching go-DDS's p.dataSock.send(...)
+// call sites verbatim.
+
+void Participant::start_data_loop_v6() {
+    if (!data_sock_v6_.valid()) return; // IPv6 not requested, or bind failed (soft failure)
+    if (data_running_v6_.exchange(true)) return;
+    data_thread_v6_ = std::thread(&Participant::data_loop_v6, this);
+}
+
+void Participant::stop_data_loop_v6() {
+    if (!data_running_v6_.exchange(false)) return;
+    if (data_thread_v6_.joinable()) data_thread_v6_.join();
+}
+
+void Participant::data_loop_v6() {
+    while (data_running_v6_.load(std::memory_order_relaxed)) {
+        auto pkt = data_sock_v6_.recv();
+        if (!data_running_v6_.load(std::memory_order_relaxed)) return;
         if (!pkt) continue;
         handle_data_packet(pkt->data, pkt->from_address, pkt->from_port);
     }

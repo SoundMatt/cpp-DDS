@@ -6,6 +6,48 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.13.0] — 2026-07-27
+
+### Added
+
+- RTPS Tier-1 sub-phase 10 (see `ROADMAP.md`, "Tier 1 — RTPS wire protocol",
+  phase 10 "IPv6 / wildcard locators" — best-effort, non-gating, per
+  go-DDS's own "limited interop testing" framing): IPv6 UDP socket support
+  and an opt-in `ParticipantOptions::ipv6` flag. This was the last of
+  Tier 1's ten dependency-ordered RTPS sub-phases — Tier 1 is now complete.
+- `dds::rtps::UdpSocket::bind_unicast_v6` / `bind_multicast_receive_v6`
+  (`include/dds/rtps/transport.hpp`, `src/rtps/transport.cpp`): C++ ports
+  of go-DDS's `newUnicastSocketV6` / `newMulticastReceiveSocketV6`, plus a
+  new `AddressFamily` tag and family-aware `send_to`/`recv`. No wire-format
+  change: `Locator_t` has encoded/decoded UDPv6-kind values
+  byte-identically to go-DDS since Tier-1 phase 1/2 (kind-agnostic 24-byte
+  layout), and wildcard (0.0.0.0-address) locator fill-in was already
+  implemented in phases 4-5 — this phase is purely the socket/transport
+  primitive and its participant-level wiring.
+- `dds::rtps::ParticipantOptions::ipv6` (`include/dds/rtps/participant.hpp`,
+  `src/rtps/participant.cpp`): a C++ port of go-DDS's `WithIPv6()` option,
+  deliberately matching its exact integration depth rather than an
+  idealized rewrite — binds three additional IPv6 sockets (soft-fail
+  tolerated), of which only the user-data socket is wired into a receive
+  path (a new `data_loop_v6`, feeding the same `handle_data_packet` as the
+  IPv4 path); outbound replies/retransmits always go via the IPv4 socket
+  regardless of arrival socket, and SPDP/SEDP discovery remains IPv4-only —
+  both are faithful ports of go-DDS's own `participant.go` behavior, not
+  oversights (see `ROADMAP.md` phase 10's "Done" note for the full
+  rationale, including why go-DDS's own IPv6 tests are similarly shallow).
+- 8 new tests (5 transport-level IPv6 socket tests, 3 participant-level —
+  including a real end-to-end test injecting a wire-correct DATA
+  submessage from a raw `::1` UdpSocket into a Participant's IPv6 data
+  port) — 287/287 total. Verified locally with Release C++17/C++20 builds
+  (plus the changed and new files additionally compiled warning-clean
+  under a genuine `-std=c++20` invocation) and a Debug ASan+UBSan pass; CI
+  additionally exercises Linux/gcc-12 ASan+UBSan.
+- Scope: internal, additive — `ParticipantOptions::ipv6` is opt-in and off
+  by default, and (as with every prior RTPS phase) none of this is wired
+  into `dds::adapt()` or any automatic-transport-selection surface.
+
+---
+
 ## [0.12.0] — 2026-07-27
 
 ### Added
