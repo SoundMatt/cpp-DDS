@@ -566,13 +566,21 @@ it:
 
 ## Tier 2 — safety and security (v0.3.0)
 
-- **`ddssafety` / E2E protection** — byte-compatible port of go-DDS's E2E wire header:
+- [x] **`ddssafety` / E2E protection** — byte-compatible port of go-DDS's E2E wire header:
   `E2EPublisher` prepends an 18-byte protection header (little-endian: 2-byte DataID,
   plus CRC, sequence counter, and freshness fields) to every payload before writing;
   `E2ESubscriber` strips the header and validates CRC, sequence counter, and sample
   freshness on receipt (go-DDS `safety/e2e.go`, package ~658 LOC incl. tests). Wire
   compatibility with go-DDS's header format is required here for the same reason it's
   required for RTPS — this is cross-language interop, not just a local feature port.
+  **Done (v0.17.0):** `dds::safety::E2EPublisher`/`E2ESubscriber`
+  (`include/dds/safety/e2e.hpp`, `src/safety/e2e.cpp`) — byte-exact 18-byte header
+  layout and CRC-16/CCITT-FALSE algorithm verified against reference vectors
+  independently derived from a fresh go-DDS clone (see `tests/test_safety_e2e.cpp`).
+  go-DDS's `safety.SafetyMetricsProvider`/`SafetyEvent`/monitor-integration surface
+  (`safety/metrics.go`) is a separate, Tier-5-adjacent observability layer and is out
+  of scope for this item, which covers the wire header plus
+  CRC/sequence/freshness validation only.
 - **`security`** — HMAC-SHA-256 message authentication, AES-256-GCM encryption layer,
   topic ACL (per-participant/per-topic `Permission` bitfield), anti-replay sequence
   number enforcement (go-DDS `security/`, 639 LOC). Carried forward from the previous

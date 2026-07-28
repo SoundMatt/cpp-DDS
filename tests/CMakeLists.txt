@@ -15,6 +15,7 @@ add_executable(cppdds_tests
     test_rtps_reliable.cpp
     test_rtps_fragment.cpp
     test_rtps_loan.cpp
+    test_safety_e2e.cpp
 )
 
 target_link_libraries(cppdds_tests

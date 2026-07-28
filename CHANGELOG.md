@@ -6,6 +6,47 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.17.0] — 2026-07-27
+
+### Added
+
+- `dds::safety::E2EPublisher` / `dds::safety::E2ESubscriber`
+  (`include/dds/safety/e2e.hpp`, `src/safety/e2e.cpp`) — a byte-compatible
+  C++ port of go-DDS's end-to-end (E2E) data protection wire header
+  (`safety/e2e.go`), the first item of `ROADMAP.md`'s "Tier 2 — safety and
+  security". `E2EPublisher` wraps a `dds::IPublisher` and prepends an
+  18-byte little-endian protection header (DataID, SourceID,
+  SequenceCounter, Timestamp, CRC-16/CCITT-FALSE) to every payload before
+  writing, with a per-publisher sequence counter starting at 1.
+  `E2ESubscriber` wraps a `dds::ISubscriber`, strips the header from every
+  received sample on a background pump thread, and validates CRC,
+  sequence-counter continuity, and sample freshness against
+  `E2EConfig::max_age` (zero disables freshness checking) — valid samples
+  are forwarded via `channel()`; violations are reported via `errors()`
+  without suppressing delivery of sequence-gapped samples (matching
+  go-DDS's own behavior).
+- Byte-exact wire-format vectors (18-byte header layout and the
+  CRC-16/CCITT-FALSE algorithm) independently derived from a fresh go-DDS
+  clone and checked in `tests/test_safety_e2e.cpp`, following the same
+  reference-vector derivation convention `test_rtps_cdr.cpp` established
+  for RTPS.
+- `requirements/requirements.json` gains `REQ-E2E-001` through
+  `REQ-E2E-006`, traced (`fusa:req`) and tested (`fusa:test`).
+
+Internal/additive: `E2EPublisher` fully implements `dds::IPublisher`
+(including the context-bounded `write()` overload, per `REQ-SAFETY-003`) —
+a strict improvement over go-DDS's own `E2EPublisher`, which in practice
+does not satisfy the full `dds.Publisher` interface (no `WriteCtx`).
+`E2ESubscriber` is not forced into `dds::ISubscriber` for the same reason
+go-DDS's own type isn't a full `Subscriber` either (no `TryRead`/
+`Unsubscribe`); it exposes `channel()`/`errors()`/`close()` instead,
+mirroring go-DDS's actual surface. go-DDS's `safety.SafetyMetricsProvider`/
+`SafetyEvent`/monitor-integration layer (`safety/metrics.go`) is
+Tier-5-adjacent observability and out of scope for this item.
+
+Verified locally: Release C++17/C++20 clean, all tests passing, Debug
+ASan+UBSan clean. `ROADMAP.md` checked off.
+
 ## [0.16.0] — 2026-07-28
 
 ### Added
