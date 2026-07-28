@@ -8,6 +8,18 @@
 // All mock participants sharing the same process-global Broker exchange
 // samples synchronously. Use for unit tests; replace with a real transport
 // (RTPS/CycloneDDS) for multi-process or multi-host operation.
+//
+// create()'s `isolated_broker` parameter is a C++ port of go-DDS's
+// mock.IsolatedBroker() Option (mock/mock.go): when true, the returned
+// participant gets its own independent Broker instead of sharing the
+// process-global one, so publishing on it never echoes to a subscriber on
+// a *different* participant (isolated or not) — needed by any test that
+// models two separate DDS domains in one process (e.g.
+// dds::bridge::wan's loopback-TCP tests bridging between two mock
+// participants standing in for two real domains). Two isolated
+// participants are isolated from each other too, exactly like go-DDS's
+// TestIsolatedBroker_NoEcho verifies. Defaults to false (shared global
+// broker), so every existing create() call site is unaffected.
 
 #pragma once
 
@@ -15,6 +27,7 @@
 #include <memory>
 
 // fusa:req REQ-MOCK-001 REQ-MOCK-002 REQ-MOCK-003 REQ-MOCK-004 REQ-MOCK-005
+// fusa:req REQ-MOCK-006
 // fusa:req REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003
 // fusa:req REQ-METRICS-004 REQ-METRICS-005 REQ-METRICS-006
 // fusa:req REQ-HEALTH-001 REQ-HEALTH-002 REQ-HEALTH-003
@@ -48,8 +61,10 @@ public:
 
 // create returns a new in-process participant joined to the given domain.
 // Returns ErrDomainOutOfRange if domain is outside 0–232.
-// fusa:req REQ-MOCK-001 REQ-MOCK-002
+// isolated_broker: see the file-level comment above (default false =
+// shared process-global Broker, matching every prior create() call site).
+// fusa:req REQ-MOCK-001 REQ-MOCK-002 REQ-MOCK-006
 std::pair<std::shared_ptr<IMockParticipant>, std::error_code>
-create(Domain domain = 0);
+create(Domain domain = 0, bool isolated_broker = false);
 
 } // namespace dds::mock
