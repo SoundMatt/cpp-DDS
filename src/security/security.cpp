@@ -60,7 +60,13 @@ HMACPlugin::seal(const std::vector<uint8_t>& plaintext) {
     auto tag = detail::hmac_sha256(key_.data(), key_.size(), plaintext.data(), plaintext.size());
 
     std::vector<uint8_t> out(plaintext.size() + kHmacSize);
-    std::memcpy(out.data(), plaintext.data(), plaintext.size());
+    // Guard against plaintext.data()==nullptr for an empty plaintext:
+    // memcpy's source parameter is declared nonnull by libc even when the
+    // copy length is zero, so calling it unconditionally trips UBSan's
+    // nonnull-attribute check.
+    if (!plaintext.empty()) {
+        std::memcpy(out.data(), plaintext.data(), plaintext.size());
+    }
     std::memcpy(out.data() + plaintext.size(), tag.data(), tag.size());
     return {std::move(out), {}};
 }

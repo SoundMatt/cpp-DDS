@@ -143,7 +143,11 @@ std::array<uint8_t, 32> hmac_sha256(const uint8_t* key, std::size_t key_len, con
     if (key_len > block_size) {
         auto kh = Sha256::hash(key, key_len);
         std::memcpy(k0, kh.data(), kh.size());
-    } else {
+    } else if (key_len > 0) {
+        // Guard against key==nullptr with key_len==0 (e.g. an empty key
+        // vector's data()): memcpy's source parameter is declared nonnull
+        // by libc even when the copy length is zero, so calling it
+        // unconditionally trips UBSan's nonnull-attribute check.
         std::memcpy(k0, key, key_len);
     }
 
