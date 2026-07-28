@@ -701,10 +701,75 @@ it:
   `src/cdr/`, internal to `cppdds_lib` — no CMake target-splitting yet (per this
   tier's own caveat, that happens once `ddstools`/`cppdds_tools` has multiple
   packages to house, not before).
-- **`idl`** — OMG IDL parser plus a C++ code generator, exposed via a standalone
+- [x] **`idl`** — OMG IDL parser plus a C++ code generator, exposed via a standalone
   `ddstool` CLI target under `cppdds_tools` (go-DDS `idl/`, 1,382 LOC, plus
   `cmd/ddstool`, part of `cmd`'s 1,462 LOC — go-DDS's single largest package outside
   `rtps`).
+  **Done (v0.21.0):** `include/dds/idl/idl.hpp` + `src/idl/parser.cpp` +
+  `src/idl/gen.cpp` — a faithful C++ port of go-DDS's `tools/idl` package
+  (`ast.go`/`idl.go`/`parser.go`/`gen.go`): a hand-written lexer/recursive-descent
+  parser covering module (nestable)/struct/enum/typedef declarations, basic types,
+  bounded/unbounded sequences, bounded strings, fixed-size arrays, qualified
+  `Module::Name` references, and the `@key` field annotation; and a code generator
+  emitting a self-contained C++ header — a struct/`enum class`/`using`-alias per IDL
+  declaration (field/type names verbatim, no PascalCase conversion) plus a
+  `<Name>Codec` per struct with `marshal()`/`unmarshal()` built on
+  `dds::cdr::Encoder`/`Decoder` (this tier's own `cdr`, v0.20.0) and `key_fields()`,
+  nested struct/enum references inlined recursively at the call site with no wrapper
+  header (matching CDR wire semantics and go-DDS's own generator exactly) and a cycle
+  guard for self-referential struct graphs. Exposed via a new standalone `ddstool` CLI
+  executable (`ddstool/cli.hpp`+`cli.cpp`+`main.cpp`, `ddstool idl [-out <file>]
+  [-namespace <name>] <input.idl>`) — distinct from the existing `cpp-dds`
+  RELAY-conformance CLI under `cli/`, per this item's own scope, and landed as a plain
+  top-level `ddstool/` directory (the full `cppdds_tools` target-group split, like
+  `cdr`'s/`xtypes`'s own precedent, is deferred until the group has enough members to
+  warrant it — see this tier's own caveat above `cdr`). Two behaviors were
+  independently confirmed against a fresh go-DDS clone before porting, since neither is
+  stated in go-DDS's own `idl_test.go` matrix: `Generate`'s emitted package/namespace
+  name is always `idlgen` unless the caller overrides the root `Module`'s name first
+  (a top-level `module X { ... }` declaration becomes a *sub*-module, never the root
+  itself), and a parenthesized annotation argument (`@id(5)`) is a parse error rather
+  than being silently accepted (go-DDS's lexer has no `(`/`)` token, so its
+  `(...)`-skip branch in `parseStruct`'s annotation loop never actually triggers) —
+  both faithfully preserved here, not "fixed". A related generator-only divergence was
+  found and deliberately kept: go-DDS's own `Generate()` actually *fails* on a
+  self-referential-via-sequence struct (a `// TODO: ... (cyclic struct)` comment lands
+  mid-line in its semicolon-joined single-line field-expansion style and comments out
+  a loop's closing `}`, leaving gofmt-rejected unbalanced braces) — this port emits one
+  statement per source line, so the analogous comment never swallows subsequent code
+  and generation succeeds with valid (if functionally incomplete for the guarded
+  field) C++; treated as an accidental go-DDS formatting bug, not a semantic to
+  reproduce. Two further deliberate, documented scope differences from the go-DDS
+  reference generator: C++ field/struct/enum names are emitted exactly as written in
+  the IDL source (no PascalCase conversion — C++ has no public/private-by-case rule to
+  satisfy), and no `TypedPublisher`/`TypedSubscriber` factory functions are emitted
+  (cpp-DDS has no `dds::Codec<T>`/`TypedPublisher<T>` abstraction yet to target); and
+  `ddstool` itself scopes down to the `idl` subcommand only (go-DDS's reference
+  `cmd/ddstool` also has `pub`/`sub`/`discover`, out of scope for this item — cpp-DDS's
+  own `cpp-dds` CLI under `cli/` already covers protocol-level conformance concerns).
+  Every `marshal()` byte sequence verified byte-exact against reference vectors
+  independently derived from a fresh go-DDS clone (calling go-DDS's actual generated
+  `HeaderCodec{}.Marshal`/`TelemetryCodec{}.Marshal` — themselves produced by go-DDS's
+  real `idl.Generate()` — from a scratch `_test.go` file, never committed upstream, per
+  this repo's established white-box vector-derivation convention). A checked-in
+  round-trip fixture (`tests/idl_roundtrip/schema.idl` + `schema_gen.hpp`, the latter
+  produced by actually running the `ddstool` binary this item adds, not hand-written)
+  mirrors go-DDS's own `tools/idl/roundtrip/` package shape field-for-field, giving
+  genuine end-to-end confidence the generator's *output* both compiles and behaves
+  correctly, not just that its source text contains the right tokens. Verified with
+  101 new tests — `tests/test_idl.cpp` (44, parser/generator behavior mirroring
+  go-DDS's `idl_test.go` matrix plus the independently confirmed behaviors above and
+  additional parse-error/cycle-guard coverage), `tests/test_ddstool_cli.cpp` (13,
+  subcommand dispatch/flag parsing/stdout-vs-`-out`/error paths, exercised in-process
+  via a `ddstool_cli` static library rather than subprocess spawn), and
+  `tests/idl_roundtrip/test_idl_roundtrip.cpp` (18, byte-exact vectors, round trips,
+  `key_fields()`, buffer-truncation rejection at every field boundary, mirroring
+  go-DDS's `roundtrip/schema_test.go` matrix) — 500/500 tests total, verified locally
+  with Release C++17 and C++20 builds (the new files additionally compiled
+  warning-clean under a genuine `-std=c++20` invocation directly, per phase 6's
+  precedent for this repo's C++20 CI-leg quirk) and a Debug ASan/UBSan pass on
+  macOS/AppleClang; CI additionally exercises Linux/gcc-12 ASan+UBSan. `REQ-IDL-001`
+  through `REQ-IDL-009` added, traced and tested.
 - **`tsn`** — TSN (802.1) QoS fields: transport priority, latency budget, TAPRIO
   integration. go-DDS's `tsn` package is Linux-specific with a `!linux` build-tag stub
   for other platforms (824 LOC) — cpp-DDS should follow the same platform-gated pattern

@@ -2,10 +2,13 @@
   {
     "id": "REQ-DDS-001",
     "title": "Domain type and validation",
-    "text": "The system shall define a Domain type (integer) validated to the range 0–232 inclusive, returning ErrDomainOutOfRange for values outside that range.",
+    "text": "The system shall define a Domain type (integer) validated to the range 0\u2013232 inclusive, returning ErrDomainOutOfRange for values outside that range.",
     "category": "functional",
     "criticality": "high",
-    "standards": ["ISO 26262 §8.4.5", "IEC 61508-3 SIL-2"]
+    "standards": [
+      "ISO 26262 \u00a78.4.5",
+      "IEC 61508-3 SIL-2"
+    ]
   },
   {
     "id": "REQ-DDS-002",
@@ -24,10 +27,12 @@
   {
     "id": "REQ-DDS-004",
     "title": "Sample type and message conversion",
-    "text": "The system shall define a Sample struct and implement lossless Sample::to_message() and from_message() per RELAY spec §15.7.2, including topic, payload, timestamp, seq, and writer_guid. The encoding must match the RELAY spec golden vector (topic=rt/chatter, seq=7, guid bytes 1–16, meta dds.writer_guid=0102030405060708090a0b0c0d0e0f10).",
+    "text": "The system shall define a Sample struct and implement lossless Sample::to_message() and from_message() per RELAY spec \u00a715.7.2, including topic, payload, timestamp, seq, and writer_guid. The encoding must match the RELAY spec golden vector (topic=rt/chatter, seq=7, guid bytes 1\u201316, meta dds.writer_guid=0102030405060708090a0b0c0d0e0f10).",
     "category": "functional",
     "criticality": "high",
-    "standards": ["RELAY spec §15.7.2"]
+    "standards": [
+      "RELAY spec \u00a715.7.2"
+    ]
   },
   {
     "id": "REQ-DDS-005",
@@ -35,33 +40,36 @@
     "text": "The system shall define an IPublisher abstract interface with write(payload), write(ctx, payload), and close() methods, returning ErrPayloadTooLarge when QoS.max_sample_size is exceeded and ErrTimeout when the context has expired.",
     "category": "functional",
     "criticality": "high",
-    "standards": ["RELAY spec §8.2", "DO-178C §6.3.2.c"]
+    "standards": [
+      "RELAY spec \u00a78.2",
+      "DO-178C \u00a76.3.2.c"
+    ]
   },
   {
     "id": "REQ-DDS-006",
     "title": "ISubscriber interface",
-    "text": "The system shall define an ISubscriber abstract interface with channel(), try_read(), unsubscribe(), and close() methods per RELAY spec §8.2.",
+    "text": "The system shall define an ISubscriber abstract interface with channel(), try_read(), unsubscribe(), and close() methods per RELAY spec \u00a78.2.",
     "category": "functional",
     "criticality": "high"
   },
   {
     "id": "REQ-DDS-007",
     "title": "IParticipant interface",
-    "text": "The system shall define an IParticipant abstract interface with new_publisher(), new_subscriber(), domain(), and close() methods per RELAY spec §8.2.",
+    "text": "The system shall define an IParticipant abstract interface with new_publisher(), new_subscriber(), domain(), and close() methods per RELAY spec \u00a78.2.",
     "category": "functional",
     "criticality": "high"
   },
   {
     "id": "REQ-DDS-008",
     "title": "DDS error sentinels",
-    "text": "The system shall define a dds error category and the DDS-specific error codes ErrTopicEmpty, ErrQoSMismatch, ErrDeadlineMissed, ErrSampleRejected, ErrResourceLimits, ErrLoanBuffer, ErrDomainOutOfRange, each mapping to the closest relay sentinel per RELAY spec §5.3.",
+    "text": "The system shall define a dds error category and the DDS-specific error codes ErrTopicEmpty, ErrQoSMismatch, ErrDeadlineMissed, ErrSampleRejected, ErrResourceLimits, ErrLoanBuffer, ErrDomainOutOfRange, each mapping to the closest relay sentinel per RELAY spec \u00a75.3.",
     "category": "functional",
     "criticality": "high"
   },
   {
     "id": "REQ-DDS-009",
     "title": "adapt() relay::INode bridge",
-    "text": "The system shall provide adapt() to wrap an IParticipant as a relay::INode, forwarding send/subscribe/close and translating relay::Message ↔ dds::Sample per §15.7.2.",
+    "text": "The system shall provide adapt() to wrap an IParticipant as a relay::INode, forwarding send/subscribe/close and translating relay::Message \u2194 dds::Sample per \u00a715.7.2.",
     "category": "functional",
     "criticality": "high"
   },
@@ -71,7 +79,9 @@
     "text": "The system shall provide a SampleFilter predicate type and a with_filter(pred) subscriber option that silently drops samples not matching the predicate before they reach the subscriber channel.",
     "category": "functional",
     "criticality": "medium",
-    "standards": ["RELAY spec §6.4"]
+    "standards": [
+      "RELAY spec \u00a76.4"
+    ]
   },
   {
     "id": "REQ-DDS-011",
@@ -79,19 +89,21 @@
     "text": "The system shall provide a with_deadline_missed(callback) subscriber option that invokes the callback when QoS.deadline elapses without a sample being received on the subscriber.",
     "category": "functional",
     "criticality": "medium",
-    "standards": ["RELAY spec §8.2.3"]
+    "standards": [
+      "RELAY spec \u00a78.2.3"
+    ]
   },
   {
     "id": "REQ-DDS-012",
-    "title": "WaitSet — multiplex subscriber channels",
+    "title": "WaitSet \u2014 multiplex subscriber channels",
     "text": "The system shall provide a WaitSet class that multiplexes multiple subscriber channels onto a single wait_any() call, returning the first available sample and its source index. Equivalent to go-DDS WaitSet.",
     "category": "functional",
     "criticality": "medium"
   },
   {
     "id": "REQ-DDS-013",
-    "title": "ILoaningPublisher — zero-copy loan-based write",
-    "text": "The system shall provide an ILoaningPublisher interface extending IPublisher with loan_buffer(), write_loaned(), and return_loan() for zero-copy sample publishing equivalent to go-DDS LoaningPublisher (RELAY spec §8.3).",
+    "title": "ILoaningPublisher \u2014 zero-copy loan-based write",
+    "text": "The system shall provide an ILoaningPublisher interface extending IPublisher with loan_buffer(), write_loaned(), and return_loan() for zero-copy sample publishing equivalent to go-DDS LoaningPublisher (RELAY spec \u00a78.3).",
     "category": "functional",
     "criticality": "low"
   },
@@ -126,7 +138,7 @@
   {
     "id": "REQ-MOCK-005",
     "title": "Mock unsubscribe semantics",
-    "text": "After Unsubscribe() the channel is closed, further sends are silently dropped, and calling Unsubscribe() again is a no-op per RELAY spec §6.4.",
+    "text": "After Unsubscribe() the channel is closed, further sends are silently dropped, and calling Unsubscribe() again is a no-op per RELAY spec \u00a76.4.",
     "category": "functional",
     "criticality": "high"
   },
@@ -136,7 +148,9 @@
     "text": "The mock participant shall track write_count and bytes_written incremented atomically on each successful IPublisher::write() call.",
     "category": "observability",
     "criticality": "medium",
-    "standards": ["RELAY spec §9.1"]
+    "standards": [
+      "RELAY spec \u00a79.1"
+    ]
   },
   {
     "id": "REQ-METRICS-002",
@@ -144,7 +158,9 @@
     "text": "The mock participant shall track deliver_count, drop_count, and bytes_delivered reflecting actual broker delivery outcomes per publish cycle.",
     "category": "observability",
     "criticality": "medium",
-    "standards": ["RELAY spec §9.1"]
+    "standards": [
+      "RELAY spec \u00a79.1"
+    ]
   },
   {
     "id": "REQ-METRICS-003",
@@ -152,15 +168,19 @@
     "text": "The mock participant shall implement relay::IMetricsProvider, exposing an atomic snapshot of all counters via metrics() with no side effects.",
     "category": "observability",
     "criticality": "medium",
-    "standards": ["RELAY spec §9.1"]
+    "standards": [
+      "RELAY spec \u00a79.1"
+    ]
   },
   {
     "id": "REQ-METRICS-004",
     "title": "dds::IMetricsProvider interface",
-    "text": "Both dds::mock and dds::rtps::Participant shall implement dds::IMetricsProvider — the DDS-package-scoped counterpart to relay::IMetricsProvider mirroring go-DDS's dds.MetricsProvider (dds.go) — exposing an atomic snapshot of write/deliver/drop counts and byte totals via dds_metrics() with no side effects.",
+    "text": "Both dds::mock and dds::rtps::Participant shall implement dds::IMetricsProvider \u2014 the DDS-package-scoped counterpart to relay::IMetricsProvider mirroring go-DDS's dds.MetricsProvider (dds.go) \u2014 exposing an atomic snapshot of write/deliver/drop counts and byte totals via dds_metrics() with no side effects.",
     "category": "observability",
     "criticality": "medium",
-    "standards": ["go-DDS dds.go MetricsProvider"]
+    "standards": [
+      "go-DDS dds.go MetricsProvider"
+    ]
   },
   {
     "id": "REQ-METRICS-005",
@@ -168,7 +188,9 @@
     "text": "Both dds::mock and dds::rtps::Participant shall implement dds::IDiscoveryMetricsProvider, mirroring go-DDS's dds.DiscoveryMetricsProvider (dds.go). The mock has no real network discovery and shall always return zero-valued DiscoveryMetrics; dds::rtps::Participant shall report live SPDP/SEDP counters (announces sent/received, known peers, peer evictions, endpoint matches).",
     "category": "observability",
     "criticality": "medium",
-    "standards": ["go-DDS dds.go DiscoveryMetricsProvider"]
+    "standards": [
+      "go-DDS dds.go DiscoveryMetricsProvider"
+    ]
   },
   {
     "id": "REQ-METRICS-006",
@@ -176,39 +198,51 @@
     "text": "Both dds::mock and dds::rtps::Participant shall implement dds::ITopicMetricsProvider, mirroring go-DDS's dds.TopicMetricsProvider (dds.go), exposing topic_metrics() as a per-topic breakdown (write/deliver/drop counts and byte totals) of the aggregate dds::Metrics counters.",
     "category": "observability",
     "criticality": "medium",
-    "standards": ["go-DDS dds.go TopicMetricsProvider"]
+    "standards": [
+      "go-DDS dds.go TopicMetricsProvider"
+    ]
   },
   {
     "id": "REQ-HEALTH-001",
-    "title": "IHealthProvider — healthy status",
+    "title": "IHealthProvider \u2014 healthy status",
     "text": "The mock participant shall implement relay::IHealthProvider, returning HealthStatus::OK while active.",
     "category": "observability",
     "criticality": "medium",
-    "standards": ["RELAY spec §9.2"]
+    "standards": [
+      "RELAY spec \u00a79.2"
+    ]
   },
   {
     "id": "REQ-HEALTH-002",
-    "title": "IHealthProvider — degraded on close",
+    "title": "IHealthProvider \u2014 degraded on close",
     "text": "After close() the mock participant's health() shall return HealthStatus::Down.",
     "category": "observability",
     "criticality": "medium",
-    "standards": ["RELAY spec §9.2"]
+    "standards": [
+      "RELAY spec \u00a79.2"
+    ]
   },
   {
     "id": "REQ-HEALTH-003",
     "title": "dds::IHealthProvider interface",
-    "text": "Both dds::mock and dds::rtps::Participant shall implement dds::IHealthProvider — the DDS-package-scoped counterpart to relay::IHealthProvider mirroring go-DDS's dds.HealthProvider (dds.go) — exposing a point-in-time participant/transport health snapshot via dds_health(), returning HealthStatus::Down with a JSON-encoded details string once closed and HealthStatus::OK otherwise. dds::rtps::Participant additionally folds live writer/reader counts into the details string when open, matching go-DDS's rtps.participant.Health() exactly.",
+    "text": "Both dds::mock and dds::rtps::Participant shall implement dds::IHealthProvider \u2014 the DDS-package-scoped counterpart to relay::IHealthProvider mirroring go-DDS's dds.HealthProvider (dds.go) \u2014 exposing a point-in-time participant/transport health snapshot via dds_health(), returning HealthStatus::Down with a JSON-encoded details string once closed and HealthStatus::OK otherwise. dds::rtps::Participant additionally folds live writer/reader counts into the details string when open, matching go-DDS's rtps.participant.Health() exactly.",
     "category": "observability",
     "criticality": "medium",
-    "standards": ["go-DDS dds.go HealthProvider"]
+    "standards": [
+      "go-DDS dds.go HealthProvider"
+    ]
   },
   {
     "id": "REQ-SEC-001",
     "title": "Domain boundary enforcement",
-    "text": "The system shall reject any domain identifier outside 0–232 inclusive before any object is created, preventing access to out-of-range DDS domains.",
+    "text": "The system shall reject any domain identifier outside 0\u2013232 inclusive before any object is created, preventing access to out-of-range DDS domains.",
     "category": "security",
     "criticality": "high",
-    "standards": ["ISO 26262 ASIL-B §5.4.8", "IEC 61508-3 SIL-2", "NIST SP 800-53 SI-10"]
+    "standards": [
+      "ISO 26262 ASIL-B \u00a75.4.8",
+      "IEC 61508-3 SIL-2",
+      "NIST SP 800-53 SI-10"
+    ]
   },
   {
     "id": "REQ-SEC-002",
@@ -216,7 +250,10 @@
     "text": "When QoS.max_sample_size > 0 the system shall reject payloads exceeding that size with ErrPayloadTooLarge, preventing heap exhaustion from oversized samples.",
     "category": "security",
     "criticality": "high",
-    "standards": ["NIST SP 800-53 SI-16", "ISO 26262 ASIL-B §8.4.5"]
+    "standards": [
+      "NIST SP 800-53 SI-16",
+      "ISO 26262 ASIL-B \u00a78.4.5"
+    ]
   },
   {
     "id": "REQ-SEC-003",
@@ -224,7 +261,9 @@
     "text": "The system shall reject empty topic names with ErrTopicEmpty at the IParticipant level, preventing creation of publishers or subscribers on unnamed topics.",
     "category": "security",
     "criticality": "high",
-    "standards": ["NIST SP 800-53 SI-10"]
+    "standards": [
+      "NIST SP 800-53 SI-10"
+    ]
   },
   {
     "id": "REQ-SEC-004",
@@ -232,7 +271,9 @@
     "text": "IPublisher::write() calls on a closed publisher or participant shall return ErrClosed without publishing any data.",
     "category": "security",
     "criticality": "high",
-    "standards": ["ISO 26262 ASIL-B §8.4.5"]
+    "standards": [
+      "ISO 26262 ASIL-B \u00a78.4.5"
+    ]
   },
   {
     "id": "REQ-SEC-005",
@@ -240,7 +281,11 @@
     "text": "All shared mutable state (Broker subscriptions, last-sample cache, participant counters) shall be protected by appropriate synchronisation primitives, ensuring data-race freedom under concurrent access.",
     "category": "security",
     "criticality": "high",
-    "standards": ["ISO 26262 ASIL-B §5.4.7", "IEC 61508-3 SIL-2", "DO-178C §6.3.3"]
+    "standards": [
+      "ISO 26262 ASIL-B \u00a75.4.7",
+      "IEC 61508-3 SIL-2",
+      "DO-178C \u00a76.3.3"
+    ]
   },
   {
     "id": "REQ-SEC-006",
@@ -248,7 +293,9 @@
     "text": "The system shall define kMaxChanDepth = 4096 as the maximum allowed channel depth, preventing unbounded memory allocation from misconfigured subscribers.",
     "category": "security",
     "criticality": "medium",
-    "standards": ["NIST SP 800-53 SI-16"]
+    "standards": [
+      "NIST SP 800-53 SI-16"
+    ]
   },
   {
     "id": "REQ-LIFECYCLE-001",
@@ -256,7 +303,10 @@
     "text": "IPublisher::close() shall be idempotent: calling it multiple times shall not produce errors or undefined behaviour.",
     "category": "lifecycle",
     "criticality": "high",
-    "standards": ["ISO 26262 ASIL-B §8.4.5", "DO-178C §6.4.4.2"]
+    "standards": [
+      "ISO 26262 ASIL-B \u00a78.4.5",
+      "DO-178C \u00a76.4.4.2"
+    ]
   },
   {
     "id": "REQ-LIFECYCLE-002",
@@ -264,7 +314,9 @@
     "text": "ISubscriber::unsubscribe() shall be idempotent: calling it multiple times or after close() shall be a no-op.",
     "category": "lifecycle",
     "criticality": "high",
-    "standards": ["ISO 26262 ASIL-B §8.4.5"]
+    "standards": [
+      "ISO 26262 ASIL-B \u00a78.4.5"
+    ]
   },
   {
     "id": "REQ-LIFECYCLE-003",
@@ -272,7 +324,9 @@
     "text": "IParticipant::close() shall be idempotent: repeated calls shall return success without side effects.",
     "category": "lifecycle",
     "criticality": "high",
-    "standards": ["ISO 26262 ASIL-B §8.4.5"]
+    "standards": [
+      "ISO 26262 ASIL-B \u00a78.4.5"
+    ]
   },
   {
     "id": "REQ-LIFECYCLE-004",
@@ -287,7 +341,9 @@
     "text": "The ISubscriber destructor shall automatically call unsubscribe(), ensuring the channel is closed and broker routing is cleaned up even if the caller does not explicitly unsubscribe.",
     "category": "lifecycle",
     "criticality": "high",
-    "standards": ["ISO 26262 ASIL-B §8.4.5"]
+    "standards": [
+      "ISO 26262 ASIL-B \u00a78.4.5"
+    ]
   },
   {
     "id": "REQ-CHAN-001",
@@ -302,7 +358,9 @@
     "text": "try_send() and try_recv() shall return immediately without blocking, returning Full/Closed or nullopt as appropriate.",
     "category": "functional",
     "criticality": "high",
-    "standards": ["DO-178C §6.3.2.c"]
+    "standards": [
+      "DO-178C \u00a76.3.2.c"
+    ]
   },
   {
     "id": "REQ-CHAN-003",
@@ -331,12 +389,14 @@
     "text": "The cpp-dds CLI conform subcommand shall invoke the RELAY conform gate and exit with code 0 on success, non-zero on failure.",
     "category": "functional",
     "criticality": "medium",
-    "standards": ["RELAY spec §11"]
+    "standards": [
+      "RELAY spec \u00a711"
+    ]
   },
   {
     "id": "REQ-CLI-003",
     "title": "CLI: convert subcommand",
-    "text": "The cpp-dds CLI convert --protocol P [--format json] subcommand shall read a dds.Sample JSON value on stdin, run it through Sample::to_message(), and write the resulting relay.Message JSON to stdout, per RELAY spec §11.2 (exit 0 converted / 1 invalid input / 2 invalid args).",
+    "text": "The cpp-dds CLI convert --protocol P [--format json] subcommand shall read a dds.Sample JSON value on stdin, run it through Sample::to_message(), and write the resulting relay.Message JSON to stdout, per RELAY spec \u00a711.2 (exit 0 converted / 1 invalid input / 2 invalid args).",
     "category": "functional",
     "criticality": "low"
   },
@@ -346,7 +406,11 @@
     "text": "All shared mutable state shall be protected by std::mutex, std::shared_mutex, or std::atomic; no data races shall be detectable under ASan/TSan analysis.",
     "category": "safety",
     "criticality": "high",
-    "standards": ["ISO 26262 ASIL-B §5.4.7", "IEC 61508-3 SIL-2 §7.4.9", "DO-178C §6.3.3"]
+    "standards": [
+      "ISO 26262 ASIL-B \u00a75.4.7",
+      "IEC 61508-3 SIL-2 \u00a77.4.9",
+      "DO-178C \u00a76.3.3"
+    ]
   },
   {
     "id": "REQ-SAFETY-002",
@@ -354,7 +418,11 @@
     "text": "All public API functions shall return std::error_code for failure signalling; no exceptions shall be thrown across public API boundaries.",
     "category": "safety",
     "criticality": "high",
-    "standards": ["ISO 26262 ASIL-B §8.4.5", "DO-178C §6.3.4", "IEC 61508-3 SIL-2"]
+    "standards": [
+      "ISO 26262 ASIL-B \u00a78.4.5",
+      "DO-178C \u00a76.3.4",
+      "IEC 61508-3 SIL-2"
+    ]
   },
   {
     "id": "REQ-SAFETY-003",
@@ -362,7 +430,10 @@
     "text": "All blocking API operations shall accept a relay::Context with timeout so callers can bound execution time and detect liveness failures.",
     "category": "safety",
     "criticality": "high",
-    "standards": ["DO-178C §6.3.2.c", "ISO 26262 ASIL-B §7.4.11"]
+    "standards": [
+      "DO-178C \u00a76.3.2.c",
+      "ISO 26262 ASIL-B \u00a77.4.11"
+    ]
   },
   {
     "id": "REQ-SAFETY-004",
@@ -370,23 +441,31 @@
     "text": "Every source file shall carry fusa:req annotations linking implementation units to requirement identifiers; every test file shall carry fusa:test annotations linking test cases to the requirements they verify. The CI fusa-asil-b job shall validate that all requirements are both implemented and tested.",
     "category": "safety",
     "criticality": "high",
-    "standards": ["IEC 61508-3 §7.2", "ISO 26262 ASIL-B §6.5", "DO-178C §11.9"]
+    "standards": [
+      "IEC 61508-3 \u00a77.2",
+      "ISO 26262 ASIL-B \u00a76.5",
+      "DO-178C \u00a711.9"
+    ]
   },
   {
     "id": "REQ-RELAY-VEC-001",
     "title": "RELAY spec golden vector conformance",
-    "text": "Sample::to_message() and from_message() must produce output that exactly matches the RELAY spec §15.7.2 golden vector: topic=rt/chatter, payload=[104,101,108,108,111,32,100,100,115], seq=7, writer_guid bytes [1..16], meta dds.writer_guid=0102030405060708090a0b0c0d0e0f10.",
+    "text": "Sample::to_message() and from_message() must produce output that exactly matches the RELAY spec \u00a715.7.2 golden vector: topic=rt/chatter, payload=[104,101,108,108,111,32,100,100,115], seq=7, writer_guid bytes [1..16], meta dds.writer_guid=0102030405060708090a0b0c0d0e0f10.",
     "category": "conformance",
     "criticality": "high",
-    "standards": ["RELAY spec §15.7.2"]
+    "standards": [
+      "RELAY spec \u00a715.7.2"
+    ]
   },
   {
     "id": "REQ-E2E-001",
     "title": "E2E protection wire header format",
-    "text": "dds::safety shall define an 18-byte, little-endian E2E protection header — DataID (uint16, bytes 0-1), SourceID (uint16, bytes 2-3), SequenceCounter (uint32, bytes 4-7), Timestamp (int64 Unix nanoseconds, bytes 8-15), CRC-16/CCITT-FALSE (uint16, bytes 16-17, computed with the CRC slot treated as zero) — byte-for-byte identical to go-DDS's safety/e2e.go, verified against independently derived reference vectors.",
+    "text": "dds::safety shall define an 18-byte, little-endian E2E protection header \u2014 DataID (uint16, bytes 0-1), SourceID (uint16, bytes 2-3), SequenceCounter (uint32, bytes 4-7), Timestamp (int64 Unix nanoseconds, bytes 8-15), CRC-16/CCITT-FALSE (uint16, bytes 16-17, computed with the CRC slot treated as zero) \u2014 byte-for-byte identical to go-DDS's safety/e2e.go, verified against independently derived reference vectors.",
     "category": "conformance",
     "criticality": "high",
-    "standards": ["go-DDS safety/e2e.go"]
+    "standards": [
+      "go-DDS safety/e2e.go"
+    ]
   },
   {
     "id": "REQ-E2E-002",
@@ -394,7 +473,10 @@
     "text": "dds::safety::E2EPublisher shall wrap a dds::IPublisher and prepend the REQ-E2E-001 header to every payload before writing, with a per-publisher SequenceCounter that starts at 1 and increments monotonically on each write, thread-safe under concurrent write() calls (REQ-SAFETY-001).",
     "category": "safety",
     "criticality": "high",
-    "standards": ["go-DDS safety/e2e.go E2EPublisher", "ISO 26262 ASIL-B §5.4.7"]
+    "standards": [
+      "go-DDS safety/e2e.go E2EPublisher",
+      "ISO 26262 ASIL-B \u00a75.4.7"
+    ]
   },
   {
     "id": "REQ-E2E-003",
@@ -402,7 +484,10 @@
     "text": "dds::safety::E2ESubscriber shall strip the REQ-E2E-001 header from every received sample and validate its CRC-16/CCITT-FALSE checksum; on mismatch it shall report E2EErrorKind::CRCMismatch via errors() and MUST NOT forward the sample to channel().",
     "category": "safety",
     "criticality": "high",
-    "standards": ["go-DDS safety/e2e.go E2ESubscriber", "ISO 26262 ASIL-B §5.4.7"]
+    "standards": [
+      "go-DDS safety/e2e.go E2ESubscriber",
+      "ISO 26262 ASIL-B \u00a75.4.7"
+    ]
   },
   {
     "id": "REQ-E2E-004",
@@ -410,7 +495,9 @@
     "text": "dds::safety::E2ESubscriber shall detect gaps in the received SequenceCounter (any value other than the immediately preceding counter + 1) and report E2EErrorKind::SequenceGap via errors(); the sample MUST still be forwarded to channel() despite the gap.",
     "category": "safety",
     "criticality": "medium",
-    "standards": ["go-DDS safety/e2e.go E2ESubscriber"]
+    "standards": [
+      "go-DDS safety/e2e.go E2ESubscriber"
+    ]
   },
   {
     "id": "REQ-E2E-005",
@@ -418,7 +505,10 @@
     "text": "When E2EConfig::max_age is non-zero, dds::safety::E2ESubscriber shall compute sample age as (now - header Timestamp) and report E2EErrorKind::StaleSample via errors() (without forwarding to channel()) when age exceeds max_age. When max_age is zero, freshness checking is disabled and samples of any age are forwarded.",
     "category": "safety",
     "criticality": "high",
-    "standards": ["go-DDS safety/e2e.go E2ESubscriber", "ISO 26262 ASIL-B §7.4.11"]
+    "standards": [
+      "go-DDS safety/e2e.go E2ESubscriber",
+      "ISO 26262 ASIL-B \u00a77.4.11"
+    ]
   },
   {
     "id": "REQ-E2E-006",
@@ -426,7 +516,9 @@
     "text": "dds::safety::E2ESubscriber shall report E2EErrorKind::HeaderTooShort via errors() (without forwarding to channel() or attempting CRC/sequence/freshness validation) whenever a received sample's payload is shorter than the 18-byte REQ-E2E-001 header.",
     "category": "safety",
     "criticality": "high",
-    "standards": ["go-DDS safety/e2e.go E2ESubscriber"]
+    "standards": [
+      "go-DDS safety/e2e.go E2ESubscriber"
+    ]
   },
   {
     "id": "REQ-SECURITY-001",
@@ -434,7 +526,10 @@
     "text": "dds::security shall define a Plugin interface with seal() and open() operations that must be inverses of one another for any plaintext when both calls succeed; all built-in Plugin implementations shall be safe for concurrent use from multiple threads.",
     "category": "security",
     "criticality": "high",
-    "standards": ["go-DDS security/security.go Plugin", "ISO 26262 ASIL-B §5.4.7"]
+    "standards": [
+      "go-DDS security/security.go Plugin",
+      "ISO 26262 ASIL-B \u00a75.4.7"
+    ]
   },
   {
     "id": "REQ-SECURITY-002",
@@ -442,7 +537,9 @@
     "text": "dds::security::NullPlugin shall implement Plugin as the identity transform: seal() and open() return the input unchanged, providing neither confidentiality nor integrity.",
     "category": "security",
     "criticality": "medium",
-    "standards": ["go-DDS security/security.go NullPlugin"]
+    "standards": [
+      "go-DDS security/security.go NullPlugin"
+    ]
   },
   {
     "id": "REQ-SECURITY-003",
@@ -450,7 +547,9 @@
     "text": "dds::security::HMACPlugin::seal() shall append a 32-byte HMAC-SHA-256 authentication tag computed over the plaintext to the end of the payload (wire format: plaintext || HMAC[32]), byte-for-byte identical to go-DDS's security.HMACPlugin, verified against reference vectors independently derived from a fresh go-DDS clone.",
     "category": "conformance",
     "criticality": "high",
-    "standards": ["go-DDS security/security.go HMACPlugin"]
+    "standards": [
+      "go-DDS security/security.go HMACPlugin"
+    ]
   },
   {
     "id": "REQ-SECURITY-004",
@@ -458,7 +557,10 @@
     "text": "dds::security::HMACPlugin::open() shall recompute the HMAC-SHA-256 tag over the received plaintext and compare it in constant time against the trailing 32 bytes of the payload, returning ErrHMACTooShort for payloads shorter than 32 bytes and ErrHMACVerificationFailed when the tag does not match (including when opened with a different key than was used to seal).",
     "category": "security",
     "criticality": "high",
-    "standards": ["go-DDS security/security.go HMACPlugin", "ISO 26262 ASIL-B §8.4.5"]
+    "standards": [
+      "go-DDS security/security.go HMACPlugin",
+      "ISO 26262 ASIL-B \u00a78.4.5"
+    ]
   },
   {
     "id": "REQ-SECURITY-005",
@@ -466,7 +568,9 @@
     "text": "dds::security::AESGCMPlugin::seal() shall encrypt the plaintext with AES-256-GCM using a fresh random 12-byte nonce per call, producing wire format nonce[12] || ciphertext || GCM-tag[16], byte-for-byte identical to go-DDS's security.AESGCMPlugin, verified against reference vectors independently derived from a fresh go-DDS clone; new_aes_gcm_plugin() shall return ErrAESKeyInvalidLength when the supplied key is not exactly 32 bytes.",
     "category": "conformance",
     "criticality": "high",
-    "standards": ["go-DDS security/security.go AESGCMPlugin"]
+    "standards": [
+      "go-DDS security/security.go AESGCMPlugin"
+    ]
   },
   {
     "id": "REQ-SECURITY-006",
@@ -474,7 +578,10 @@
     "text": "dds::security::AESGCMPlugin::open() shall verify the GCM authentication tag and reject (ErrAESDecryptFailed) any payload that has been tampered with or was sealed under a different key, and shall return ErrAESPayloadTooShort for payloads shorter than the 12-byte nonce plus 16-byte tag; two seal() calls on identical plaintext shall never produce identical ciphertext (no nonce reuse).",
     "category": "security",
     "criticality": "high",
-    "standards": ["go-DDS security/security.go AESGCMPlugin", "ISO 26262 ASIL-B §8.4.5"]
+    "standards": [
+      "go-DDS security/security.go AESGCMPlugin",
+      "ISO 26262 ASIL-B \u00a78.4.5"
+    ]
   },
   {
     "id": "REQ-SECURITY-007",
@@ -482,7 +589,10 @@
     "text": "HMACPlugin and AESGCMPlugin constructors shall copy caller-supplied key material so that subsequent mutation of the caller's buffer does not affect the plugin; new_random_key(n) shall return n cryptographically random bytes drawn from the OS entropy source, with each call producing distinct output.",
     "category": "security",
     "criticality": "high",
-    "standards": ["go-DDS security/security.go NewRandomKey", "NIST SP 800-53 SC-12"]
+    "standards": [
+      "go-DDS security/security.go NewRandomKey",
+      "NIST SP 800-53 SC-12"
+    ]
   },
   {
     "id": "REQ-SECURITY-008",
@@ -490,7 +600,10 @@
     "text": "dds::security::AccessPolicy shall evaluate its Rule list in declaration order and grant access per the first Pattern that matches a given topic (glob semantics: '*' matches one path segment, not spanning '/'; '?' and '[...]' character classes as in Go's path.Match); a topic matching no rule, or an AccessPolicy with no rules, shall deny both Read and Write; a malformed pattern shall be skipped rather than causing an error or crash.",
     "category": "security",
     "criticality": "high",
-    "standards": ["go-DDS security/access.go AccessPolicy", "NIST SP 800-53 AC-3"]
+    "standards": [
+      "go-DDS security/access.go AccessPolicy",
+      "NIST SP 800-53 AC-3"
+    ]
   },
   {
     "id": "REQ-SECURITY-009",
@@ -498,7 +611,11 @@
     "text": "dds::security::ReplayGuard::check(seq, ts) shall record seq as seen at ts and return no error the first time a sequence number is presented within the configured sliding window, and shall return ErrReplay for any subsequent check() of the same sequence number within that window; entries older than the window (relative to the most recent check()/purge() call) shall be pruned; a non-positive window shall default to 30 seconds; ReplayGuard shall be safe for concurrent use from multiple threads.",
     "category": "security",
     "criticality": "high",
-    "standards": ["go-DDS security/replay.go ReplayGuard", "NIST SP 800-53 SC-23", "ISO 26262 ASIL-B §5.4.7"]
+    "standards": [
+      "go-DDS security/replay.go ReplayGuard",
+      "NIST SP 800-53 SC-23",
+      "ISO 26262 ASIL-B \u00a75.4.7"
+    ]
   },
   {
     "id": "REQ-XTYPE-001",
@@ -506,7 +623,10 @@
     "text": "dds::xtypes shall define TypeKind (Bool, Int32, Int64, Float64, String, Bytes, Struct, Seq), FieldDescriptor (name, kind, optional, nested fields for Struct, element descriptor for Seq), and TypeDescriptor (name, version, top-level fields), field-for-field mirrors of go-DDS's xtypes.TypeKind/FieldDescriptor/TypeDescriptor.",
     "category": "functional",
     "criticality": "medium",
-    "standards": ["go-DDS tools/xtypes/xtypes.go", "OMG DDS-XTypes 1.3"]
+    "standards": [
+      "go-DDS tools/xtypes/xtypes.go",
+      "OMG DDS-XTypes 1.3"
+    ]
   },
   {
     "id": "REQ-XTYPE-002",
@@ -514,7 +634,9 @@
     "text": "dds::xtypes::identify(td) shall compute a TypeIdentifier whose hash is the first 8 bytes of SHA-256 over a canonical JSON encoding of td, byte-for-byte identical to go-DDS's xtypes.Identify()/canonical() output (compact encoding, map keys sorted lexicographically, Go's default HTML-safe string escaping), verified against reference vectors independently derived from a fresh go-DDS clone; two descriptors that differ only in field declaration order shall produce identical TypeIdentifiers, and any difference in name, field name, kind, optional flag, nested field, or sequence element shall produce a different hash.",
     "category": "conformance",
     "criticality": "high",
-    "standards": ["go-DDS tools/xtypes/xtypes.go Identify"]
+    "standards": [
+      "go-DDS tools/xtypes/xtypes.go Identify"
+    ]
   },
   {
     "id": "REQ-XTYPE-003",
@@ -522,7 +644,9 @@
     "text": "dds::xtypes::DynamicData::set(name, value) shall return ErrUnknownField when name is not declared among the backing TypeDescriptor's top-level fields, and shall otherwise store value; DynamicData::get(name) shall return an empty result for a declared-but-unset field, distinct from a field that has never been declared at all.",
     "category": "functional",
     "criticality": "medium",
-    "standards": ["go-DDS tools/xtypes/xtypes.go DynamicData"]
+    "standards": [
+      "go-DDS tools/xtypes/xtypes.go DynamicData"
+    ]
   },
   {
     "id": "REQ-XTYPE-004",
@@ -530,7 +654,9 @@
     "text": "DynamicData::to_json() shall serialise all set fields to a compact JSON object; DynamicData::from_json(text) shall fully parse and syntactically validate the entire input document before applying any field (a malformed value anywhere fails the whole call, even under an unknown key), shall silently skip (not store) any key not declared in the backing TypeDescriptor (forward compatibility), shall decode JSON numbers as double-precision values regardless of their textual shape (matching Go's json.Unmarshal-into-`any` behavior of always producing float64), and shall return ErrInvalidJSON for malformed input or a non-object top-level value.",
     "category": "functional",
     "criticality": "medium",
-    "standards": ["go-DDS tools/xtypes/xtypes.go DynamicData.ToJSON/FromJSON"]
+    "standards": [
+      "go-DDS tools/xtypes/xtypes.go DynamicData.ToJSON/FromJSON"
+    ]
   },
   {
     "id": "REQ-XTYPE-005",
@@ -538,7 +664,9 @@
     "text": "dds::xtypes::new_type_object(td) shall return a TypeObject pairing td with identify(td), computing the identifier automatically.",
     "category": "functional",
     "criticality": "low",
-    "standards": ["go-DDS tools/xtypes/xtypes.go NewTypeObject"]
+    "standards": [
+      "go-DDS tools/xtypes/xtypes.go NewTypeObject"
+    ]
   },
   {
     "id": "REQ-XTYPE-006",
@@ -546,7 +674,10 @@
     "text": "dds::xtypes::check_compatibility(writer_td, reader_td) shall report compatible=true when every reader field either exists in the writer with the same TypeKind or is absent from the writer but marked Optional in the reader; it shall report compatible=false (with a human-readable reason) when a required reader field is absent from the writer or when a shared field's TypeKind differs between writer and reader; fields present in the writer but absent from the reader shall never cause incompatibility.",
     "category": "functional",
     "criticality": "medium",
-    "standards": ["go-DDS tools/xtypes/xtypes.go CheckCompatibility", "OMG DDS-XTypes 1.3 §7.2.2 (type consistency)"]
+    "standards": [
+      "go-DDS tools/xtypes/xtypes.go CheckCompatibility",
+      "OMG DDS-XTypes 1.3 \u00a77.2.2 (type consistency)"
+    ]
   },
   {
     "id": "REQ-TREG-001",
@@ -554,7 +685,9 @@
     "text": "dds::xtypes::TypeRegistry::register_type(to) shall store to keyed by to->id.name; TypeRegistry::lookup(name) shall return the stored TypeObject for a registered name or nullptr for an unregistered one.",
     "category": "functional",
     "criticality": "medium",
-    "standards": ["go-DDS tools/xtypes/xtypes.go TypeRegistry.Register/Lookup"]
+    "standards": [
+      "go-DDS tools/xtypes/xtypes.go TypeRegistry.Register/Lookup"
+    ]
   },
   {
     "id": "REQ-TREG-002",
@@ -562,7 +695,9 @@
     "text": "TypeRegistry::register_type(to) shall return ErrTypeMismatch when a TypeObject with the same name but a different content-addressed hash is already registered, and shall be a no-op (success) when the same TypeObject (same name and hash) is registered again.",
     "category": "conformance",
     "criticality": "high",
-    "standards": ["go-DDS tools/xtypes/xtypes.go ErrTypeMismatch"]
+    "standards": [
+      "go-DDS tools/xtypes/xtypes.go ErrTypeMismatch"
+    ]
   },
   {
     "id": "REQ-TREG-003",
@@ -570,7 +705,9 @@
     "text": "TypeRegistry::all() shall return a snapshot of every registered TypeObject sorted by name; TypeRegistry shall be safe for concurrent register_type()/lookup()/all() calls from multiple threads.",
     "category": "functional",
     "criticality": "medium",
-    "standards": ["go-DDS tools/xtypes/xtypes.go TypeRegistry.All"]
+    "standards": [
+      "go-DDS tools/xtypes/xtypes.go TypeRegistry.All"
+    ]
   },
   {
     "id": "REQ-CDR-001",
@@ -578,7 +715,10 @@
     "text": "dds::cdr::Encoder shall prepend the 4-byte CDR_LE encapsulation header ({0x01,0x00,0x00,0x00}) to every buffer it produces; dds::cdr::Decoder::create() shall validate and consume that header, returning std::nullopt when the buffer is shorter than 4 bytes or the 2-byte little-endian scheme field is neither 0x0001 (CDR_LE) nor 0x0000 (CDR_BE); a decoder created from an accepted CDR_BE-scheme header shall still decode the remaining payload little-endian.",
     "category": "functional",
     "criticality": "medium",
-    "standards": ["go-DDS tools/cdr/cdr.go NewEncoder/NewDecoder", "OMG DDS-XTypes 1.3 §10.2 Table 10.1"]
+    "standards": [
+      "go-DDS tools/cdr/cdr.go NewEncoder/NewDecoder",
+      "OMG DDS-XTypes 1.3 \u00a710.2 Table 10.1"
+    ]
   },
   {
     "id": "REQ-CDR-002",
@@ -586,7 +726,10 @@
     "text": "dds::cdr::Encoder shall pad bytes between fields to enforce natural alignment: 2-byte for int16/uint16, 4-byte for int32/uint32/float32, 8-byte for int64/uint64/float64; bool/int8/uint8 fields shall not be padded. The encapsulation header shall count toward alignment.",
     "category": "functional",
     "criticality": "high",
-    "standards": ["go-DDS tools/cdr/cdr.go Encoder.align", "OMG DDS-XTypes 1.3 §10 (XCDR1 alignment rules)"]
+    "standards": [
+      "go-DDS tools/cdr/cdr.go Encoder.align",
+      "OMG DDS-XTypes 1.3 \u00a710 (XCDR1 alignment rules)"
+    ]
   },
   {
     "id": "REQ-CDR-003",
@@ -594,7 +737,10 @@
     "text": "dds::cdr::Decoder shall enforce the same alignment rules as dds::cdr::Encoder, advancing past padding bytes before every aligned read, and every read_*() method shall return std::nullopt (never read out of bounds or invoke undefined behavior) when fewer bytes remain in the buffer than the field requires, including when a string or byte-sequence's declared length exceeds the remaining buffer.",
     "category": "conformance",
     "criticality": "high",
-    "standards": ["go-DDS tools/cdr/cdr.go Decoder.align/Decoder.need", "ISO 26262 ASIL-B (defensive bounds checking)"]
+    "standards": [
+      "go-DDS tools/cdr/cdr.go Decoder.align/Decoder.need",
+      "ISO 26262 ASIL-B (defensive bounds checking)"
+    ]
   },
   {
     "id": "REQ-CDR-004",
@@ -602,7 +748,9 @@
     "text": "dds::cdr::Encoder::write_string(s) shall encode a 4-byte-aligned uint32 length (s.size()+1, for the null terminator) followed by s's raw bytes and a trailing null byte; an empty string shall encode as length=1 followed by a single null byte. dds::cdr::Encoder::write_bytes(b) shall encode a 4-byte-aligned uint32 count (b.size()) followed by b's raw bytes with no null terminator. dds::cdr::Decoder::read_string() shall strip the trailing null terminator from its result; read_bytes() shall not.",
     "category": "functional",
     "criticality": "high",
-    "standards": ["go-DDS tools/cdr/cdr.go Encoder.WriteString/WriteBytes, Decoder.ReadString/ReadBytes"]
+    "standards": [
+      "go-DDS tools/cdr/cdr.go Encoder.WriteString/WriteBytes, Decoder.ReadString/ReadBytes"
+    ]
   },
   {
     "id": "REQ-CDR-005",
@@ -610,6 +758,105 @@
     "text": "dds::cdr::Encoder::len() shall return the current total encoded length including the 4-byte encapsulation header; dds::cdr::Decoder::remaining() shall return the number of bytes not yet consumed from the buffer, both updating incrementally as fields are written or read.",
     "category": "functional",
     "criticality": "low",
-    "standards": ["go-DDS tools/cdr/cdr.go Encoder.Len/Decoder.Remaining"]
+    "standards": [
+      "go-DDS tools/cdr/cdr.go Encoder.Len/Decoder.Remaining"
+    ]
+  },
+  {
+    "id": "REQ-IDL-001",
+    "title": "Module/struct/enum/typedef parsing",
+    "text": "dds::idl::parse_string() shall parse module declarations (which may be nested), struct declarations with ordered fields, enum declarations with ordered enumerator names, and typedef alias declarations, returning a Module tree that mirrors the source's declaration order and nesting.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS tools/idl/parser.go parseModule/parseStruct/parseEnum/parseTypedef",
+      "OMG IDL 4.x \u00a77.4 (module/interface/type declarations)"
+    ]
+  },
+  {
+    "id": "REQ-IDL-002",
+    "title": "Basic IDL type parsing",
+    "text": "dds::idl::parse_string() shall recognize the basic IDL types boolean, octet, short, unsigned short, long, unsigned long, long long, unsigned long long, float, double, and string (bounded or unbounded, string<N>'s bound N being parsed and discarded), mapping each to the corresponding dds::idl::TypeKind.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS tools/idl/parser.go parseTypeSpec",
+      "OMG IDL 4.x \u00a77.4.1 (basic types)"
+    ]
+  },
+  {
+    "id": "REQ-IDL-003",
+    "title": "Sequence, array, and qualified-name parsing",
+    "text": "dds::idl::parse_string() shall parse bounded and unbounded sequence<T>[, N] (the bound N being parsed and discarded), fixed-size arrays T name[N] (recording the element count), and qualified type references Module::Name (recording the full dotted-path RefName, deferring struct-vs-enum resolution to code generation).",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS tools/idl/parser.go parseTypeSpec/parseStruct array handling",
+      "OMG IDL 4.x \u00a77.11 (sequences), \u00a77.4.2 (arrays)"
+    ]
+  },
+  {
+    "id": "REQ-IDL-004",
+    "title": "@key annotation parsing",
+    "text": "dds::idl::parse_string() shall set Field::key = true for a struct field preceded by an @key annotation and false otherwise; other bare (argument-less) annotations shall be recognized and skipped without affecting the parsed field. A parenthesized annotation argument (e.g. @id(5)) is not supported and shall produce a parse error, matching go-DDS's own parser behavior exactly (verified against a fresh go-DDS clone) rather than silently accepting or fixing it.",
+    "category": "functional",
+    "criticality": "low",
+    "standards": [
+      "go-DDS tools/idl/parser.go parseStruct annotation loop",
+      "OMG DDS-XTypes 1.3 \u00a77.3.1.2 (@key)"
+    ]
+  },
+  {
+    "id": "REQ-IDL-005",
+    "title": "Parse error reporting and malformed-input safety",
+    "text": "dds::idl::parse_string()/parse_file() shall return a ParseResult with no Module and a populated ParseError (carrying a 1-based source line number and a human-readable message) for malformed input, including an unexpected token, a missing '{'/'}'/';, an invalid or missing array size, an unknown type after 'unsigned', or an unterminated sequence/struct/enum; malformed input shall never crash, hang, or invoke undefined behavior.",
+    "category": "conformance",
+    "criticality": "high",
+    "standards": [
+      "go-DDS tools/idl/parser.go fail paths",
+      "ISO 26262 ASIL-B (defensive input handling)"
+    ]
+  },
+  {
+    "id": "REQ-IDL-006",
+    "title": "C++ struct/enum/typedef code generation",
+    "text": "dds::idl::generate() shall emit, for every struct/enum/typedef in the Module tree (including nested sub-modules, flattened into one namespace), a corresponding C++ struct (fields in declaration order, field/type names verbatim from the IDL source), enum class backed by int32_t (enumerators in declaration order starting at 0), or type alias (using Name = UnderlyingType;), inside a namespace derived from the root Module's name (lowercased) or \"idlgen\" if the root Module's name is empty.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS tools/idl/gen.go emitStruct/emitEnum/emitTypedef",
+      "OMG IDL 4.x \u00a77.4 (type declarations)"
+    ]
+  },
+  {
+    "id": "REQ-IDL-007",
+    "title": "CDR codec code generation",
+    "text": "dds::idl::generate() shall emit, for every IDL struct, a <Name>Codec type with a static marshal() building a dds::cdr::Encoder-backed byte buffer and a static unmarshal() building a dds::cdr::Decoder-backed std::optional<Name>, correctly handling primitive fields, strings, octet sequences (write_bytes/read_bytes), general sequences (uint32 length prefix plus per-element encode/decode), fixed arrays (no length prefix), and nested struct/enum/typedef references recursively inlined at the call site with no wrapper header (matching CDR wire semantics) and guarded against infinite recursion on a self-referential struct graph.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS tools/idl/gen.go encodeExpr/decodeExpr",
+      "OMG DDS-XTypes 1.3 \u00a710 (XCDR1 encoding rules)"
+    ]
+  },
+  {
+    "id": "REQ-IDL-008",
+    "title": "Key-field introspection code generation",
+    "text": "The generated <Name>Codec::key_fields() shall return, in declaration order, the names of every field marked @key in the source IDL struct, or an empty vector when no field is marked @key.",
+    "category": "functional",
+    "criticality": "low",
+    "standards": [
+      "go-DDS tools/idl/gen.go emitCodec KeyFields"
+    ]
+  },
+  {
+    "id": "REQ-IDL-009",
+    "title": "ddstool idl subcommand CLI behavior",
+    "text": "The ddstool executable's idl subcommand shall parse an input .idl file via dds::idl::parse_file(), generate C++ source via dds::idl::generate(), and write it to stdout by default or to the file named by -out when given; an optional -namespace flag shall override the root Module's name before generation. ddstool help/-h/--help shall print usage information and exit 0; an unknown subcommand, a missing required <input.idl> argument, or a parse/generate failure shall print a descriptive message to stderr and exit with a non-zero status.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS tools/cmd/ddstool/main.go runIDL"
+    ]
   }
 ]

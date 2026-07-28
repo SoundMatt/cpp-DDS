@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(cppdds
-    VERSION 0.20.0
+    VERSION 0.21.0
     DESCRIPTION "C++ DDS library — RELAY-conformant"
     HOMEPAGE_URL "https://github.com/SoundMatt/cpp-DDS"
     LANGUAGES CXX
@@ -58,6 +58,8 @@ add_library(cppdds_lib STATIC
     src/xtypes/detail/sha256.cpp
     src/xtypes/xtypes.cpp
     src/cdr/cdr.cpp
+    src/idl/parser.cpp
+    src/idl/gen.cpp
 )
 
 # Platform-specific socket tuning (SO_PRIORITY / IP_TOS / SO_TXTIME /
@@ -81,6 +83,17 @@ target_link_libraries(cppdds_lib PUBLIC Threads::Threads)
 if(WIN32)
     target_link_libraries(cppdds_lib PUBLIC ws2_32)
 endif()
+
+# ── ddstool CLI library (IDL compiler; part of the proposed `cppdds_tools`
+#    target group per ROADMAP.md's "Target architecture — 5-library split").
+#    Unconditional and ahead of tests/ below: `ddstool_cli` is a small
+#    static library (cli.cpp) that both the `ddstool` executable and
+#    tests/test_ddstool_cli.cpp link against, so tests can exercise the
+#    real subcommand-dispatch/exit-code behavior in-process rather than
+#    only via a subprocess spawn. The `ddstool` *executable* target itself
+#    remains separately opt-out via CPPDDS_BUILD_DDSTOOL — see
+#    ddstool/CMakeLists.txt.
+add_subdirectory(ddstool)
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
