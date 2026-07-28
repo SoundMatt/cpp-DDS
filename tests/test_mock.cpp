@@ -7,7 +7,7 @@
 // fusa:test REQ-DDS-005 REQ-DDS-006 REQ-DDS-007 REQ-DDS-009
 // fusa:test REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003
 // fusa:test REQ-METRICS-004 REQ-METRICS-005 REQ-METRICS-006
-// fusa:test REQ-HEALTH-001 REQ-HEALTH-002
+// fusa:test REQ-HEALTH-001 REQ-HEALTH-002 REQ-HEALTH-003
 // fusa:test REQ-SEC-002 REQ-SEC-003 REQ-SEC-004 REQ-SEC-005
 // fusa:test REQ-LIFECYCLE-001 REQ-LIFECYCLE-002 REQ-LIFECYCLE-003
 // fusa:test REQ-LIFECYCLE-004 REQ-LIFECYCLE-005
@@ -592,6 +592,24 @@ TEST_CASE("IMockParticipant implements the DDS-package-scoped metrics providers"
     CHECK(dynamic_cast<dds::mock::IMockParticipant*>(tp) != nullptr);
 }
 
+TEST_CASE("IMockParticipant implements the DDS-package-scoped health provider",
+          "[mock][REQ-HEALTH-003]") {
+    auto p = make_p();
+
+    dds::IHealthProvider* hp = p.get();
+    CHECK(hp != nullptr);
+    CHECK(hp->dds_health().status == dds::HealthStatus::OK);
+
+    // Also still implements the RELAY-generic relay::IHealthProvider
+    // simultaneously (see dds.hpp's "Health provider" section on why this
+    // requires distinct method names in C++).
+    relay::IHealthProvider* relay_hp = p.get();
+    CHECK(relay_hp != nullptr);
+    CHECK(relay_hp->health().status == relay::HealthStatus::OK);
+
+    CHECK(dynamic_cast<dds::mock::IMockParticipant*>(hp) != nullptr);
+}
+
 // ── Health ────────────────────────────────────────────────────────────────────
 
 TEST_CASE("health: OK when active", "[mock][REQ-HEALTH-001]") {
@@ -606,6 +624,36 @@ TEST_CASE("health: Down after close", "[mock][REQ-HEALTH-002]") {
     auto h = p->health();
     CHECK(h.status == relay::HealthStatus::Down);
     CHECK_FALSE(h.details.empty());
+}
+
+// ── dds::IHealthProvider (DDS-package-scoped; mirrors go-DDS's dds.go) ─────────
+
+TEST_CASE("dds_health: OK when active", "[mock][REQ-HEALTH-003]") {
+    auto p = make_p();
+    auto h = p->dds_health();
+    CHECK(h.status == dds::HealthStatus::OK);
+    CHECK(h.details.empty());
+}
+
+TEST_CASE("dds_health: Down after close", "[mock][REQ-HEALTH-003]") {
+    auto p = make_p();
+    CHECK_FALSE(p->close());
+    auto h = p->dds_health();
+    CHECK(h.status == dds::HealthStatus::Down);
+    // Matches go-DDS's mock.participant.Health() Details string verbatim.
+    CHECK(h.details == R"({"state":"closed"})");
+}
+
+TEST_CASE("dds_health and relay health() report independently but consistently",
+          "[mock][REQ-HEALTH-003]") {
+    auto p = make_p();
+    CHECK(p->dds_health().status == dds::HealthStatus::OK);
+    CHECK(p->health().status == relay::HealthStatus::OK);
+
+    CHECK_FALSE(p->close());
+
+    CHECK(p->dds_health().status == dds::HealthStatus::Down);
+    CHECK(p->health().status == relay::HealthStatus::Down);
 }
 
 // ── IDrainer ──────────────────────────────────────────────────────────────────

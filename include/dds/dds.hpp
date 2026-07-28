@@ -393,6 +393,53 @@ public:
     virtual std::vector<TopicMetrics> topic_metrics() const = 0;
 };
 
+// ── Health provider (DDS-package-scoped; mirrors go-DDS's dds.go) ──────────────
+//
+// go-DDS's core `dds` package (dds.go) declares HealthProvider distinct from
+// the RELAY-generic relay.HealthProvider (§9.2 capabilities), exactly as it
+// does for the three metrics providers above — see the "Metrics providers"
+// section's rationale, which applies verbatim here. Both `mock` and `rtps`
+// implement it in go-DDS, and `monitor`/`admin` (Tier 5, out of scope here)
+// consume it for observability export.
+//
+// As with `dds_metrics()`, a class that already implements
+// relay::IHealthProvider's `health()` (relay.hpp) cannot also override an
+// unrelated base's `health()` under the same name with a different return
+// type, so the DDS-scoped accessor below is named `dds_health()` instead —
+// dds::mock::IMockParticipant already implements relay::IHealthProvider
+// (RELAY spec §9.2).
+//
+// Internal/additive: not yet wired into dds::adapt()'s relay::INode bridge
+// or the cpp-dds CLI's `optional_interfaces` capabilities list — that
+// consumption/export layer is go-DDS's `monitor`/`admin` equivalent
+// (Tier 5, deferred per ROADMAP.md).
+
+// HealthStatus is the overall operational status of a participant
+// (go-DDS: dds.HealthStatus).
+// fusa:req REQ-HEALTH-003
+enum class HealthStatus : int { OK = 0, Degraded = 1, Down = 2 };
+
+// Health is a point-in-time health snapshot for a participant, covering both
+// participant-level and transport-level health via the free-form `details`
+// string (go-DDS: dds.Health — mock reports participant-only state;
+// dds::rtps::Participant additionally folds in transport-level detail, e.g.
+// active writer/reader counts, matching go-DDS's rtps.participant.Health
+// exactly).
+// fusa:req REQ-HEALTH-003
+struct Health {
+    HealthStatus status{HealthStatus::OK};
+    std::string  details; // optional JSON-encoded or human-readable detail; empty means none
+};
+
+// IHealthProvider is implemented by participants that expose health
+// reporting (go-DDS: dds.HealthProvider).
+// fusa:req REQ-HEALTH-003
+class IHealthProvider {
+public:
+    virtual ~IHealthProvider() = default;
+    virtual Health dds_health() const = 0;
+};
+
 // ── adapt ─────────────────────────────────────────────────────────────────────
 
 // adapt wraps a participant as a relay::INode for cross-protocol routing.

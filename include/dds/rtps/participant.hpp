@@ -228,11 +228,12 @@ struct ParticipantOptions {
 // C++ port of the entity-lifecycle and best-effort-dispatch portions of
 // go-DDS's rtps.participant — see the file-level scope note for exactly
 // what is and is not ported at this phase.
-// fusa:req REQ-METRICS-004 REQ-METRICS-005 REQ-METRICS-006
+// fusa:req REQ-METRICS-004 REQ-METRICS-005 REQ-METRICS-006 REQ-HEALTH-003
 class Participant : public IParticipant,
                      public IMetricsProvider,
                      public IDiscoveryMetricsProvider,
                      public ITopicMetricsProvider,
+                     public IHealthProvider,
                      public std::enable_shared_from_this<Participant> {
 public:
     // Binds sockets, starts SPDP/SEDP and the participant's own receive/
@@ -291,6 +292,13 @@ public:
 
     // fusa:req REQ-METRICS-006
     std::vector<TopicMetrics> topic_metrics() const override;
+
+    // ── dds::IHealthProvider (DDS-package-scoped; mirrors go-DDS's
+    // dds.HealthProvider) — see dds.hpp's "Health provider" section for why
+    // the accessor is `dds_health()` rather than `health()`.
+
+    // fusa:req REQ-HEALTH-003
+    Health dds_health() const override;
 
 private:
     friend class Writer;

@@ -6,6 +6,43 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.15.0] — 2026-07-28
+
+### Added
+
+- `dds::IHealthProvider` (see `ROADMAP.md`, "Also within `ddscore` but not
+  RTPS-specific"): a DDS-package-scoped health-reporting interface mirroring
+  go-DDS's core `dds` package (`dds.go`), implemented by both
+  `dds::mock::IMockParticipant` and `dds::rtps::Participant`.
+- `dds.hpp` gains `dds::HealthStatus`/`dds::Health`/`dds::IHealthProvider`,
+  field-for-field mirrors of go-DDS's `dds.go` `HealthStatus`/`Health`/
+  `HealthProvider`. The `details` string carries both participant- and
+  transport-level state (no separate transport-health type exists in
+  go-DDS either). Because C++ virtual dispatch (unlike Go's structural
+  interface satisfaction) cannot have two unrelated base classes both
+  declare a `health()` method with different return types on the same
+  derived class, and `dds::mock::IMockParticipant` already implements
+  `relay::IHealthProvider::health()` (RELAY spec §9.2), the new DDS-scoped
+  accessor is named `dds_health()` instead — the same collision and naming
+  precedent as `dds_metrics()` in v0.14.0.
+- `dds::mock::IMockParticipant` implements it: `dds_health()` mirrors
+  go-DDS's `mock.participant.Health()` exactly, including its
+  `{"state":"closed"}` details string on close.
+- `dds::rtps::Participant` implements it: `dds_health()` mirrors go-DDS's
+  `rtps.participant.Health()` exactly, folding live writer/reader counts
+  into `{"writers":N,"readers":N}` while open and `{"state":"closed"}`
+  once closed.
+- 7 new tests (`tests/test_mock.cpp`, `tests/test_rtps_participant.cpp`)
+  covering the interface hierarchy on both participants plus OK/Down
+  transitions and details-string content — 304/304 total. Verified locally
+  with Release C++17 and a Debug ASan/UBSan pass.
+- Scope: internal, additive — not yet wired into `dds::adapt()`'s
+  `relay::INode` bridge or the `cpp-dds` CLI's `optional_interfaces`
+  capabilities list; that consumption/export layer is go-DDS's
+  `monitor`/`admin` equivalent (Tier 5, still deferred).
+
+---
+
 ## [0.14.0] — 2026-07-28
 
 ### Added

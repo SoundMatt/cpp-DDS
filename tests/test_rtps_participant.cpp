@@ -698,3 +698,61 @@ TEST_CASE("Participant::topic_metrics: per-topic breakdown", "[rtps][participant
 
     p->close();
 }
+
+// ── dds::IHealthProvider (DDS-package-scoped; mirrors go-DDS's dds.go —
+// Tier-1-adjacent "Also within ddscore" roadmap item, not a Tier-1 RTPS
+// sub-phase) ────────────────────────────────────────────────────────────────
+
+TEST_CASE("Participant implements the DDS-package-scoped health provider",
+          "[rtps][participant][REQ-HEALTH-003]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    IHealthProvider* hp = p.get();
+    CHECK(hp != nullptr);
+    CHECK(dynamic_cast<Participant*>(hp) != nullptr);
+
+    auto h = hp->dds_health();
+    CHECK(h.status == HealthStatus::OK);
+
+    p->close();
+}
+
+TEST_CASE("Participant::dds_health: OK with writer/reader counts while active",
+          "[rtps][participant][REQ-HEALTH-003]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    auto h0 = p->dds_health();
+    CHECK(h0.status == HealthStatus::OK);
+    CHECK(h0.details == R"({"writers":0,"readers":0})");
+
+    auto [sub, sub_ec] = p->new_subscriber("HealthTopic", default_qos());
+    REQUIRE_FALSE(sub_ec);
+    auto [pub, pub_ec] = p->new_publisher("HealthTopic", default_qos());
+    REQUIRE_FALSE(pub_ec);
+
+    auto h1 = p->dds_health();
+    CHECK(h1.status == HealthStatus::OK);
+    CHECK(h1.details == R"({"writers":1,"readers":1})");
+
+    p->close();
+}
+
+TEST_CASE("Participant::dds_health: Down after close", "[rtps][participant][REQ-HEALTH-003]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    p->close();
+
+    auto h = p->dds_health();
+    CHECK(h.status == HealthStatus::Down);
+    // Matches go-DDS's rtps.participant.Health() Details string verbatim.
+    CHECK(h.details == R"({"state":"closed"})");
+}
