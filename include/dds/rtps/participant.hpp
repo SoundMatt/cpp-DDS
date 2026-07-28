@@ -185,6 +185,20 @@ namespace dds::rtps {
 class Writer;
 class Reader;
 
+// TopicCounter accumulates per-topic write/deliver/drop statistics. C++
+// port of go-DDS's topicCounter (rtps/participant.go). Internal bookkeeping
+// type feeding Participant::topic_metrics() — not itself part of the public
+// relay::ITopicMetricsProvider surface (relay::TopicMetrics is what callers
+// see).
+// fusa:req REQ-METRICS-005
+struct TopicCounter {
+    std::atomic<uint64_t> write_count{0};
+    std::atomic<uint64_t> bytes_written{0};
+    std::atomic<uint64_t> deliver_count{0};
+    std::atomic<uint64_t> drop_count{0};
+    std::atomic<uint64_t> bytes_delivered{0};
+};
+
 // ParticipantOptions configures a Participant at creation time. See the
 // file-level scope note above for `test_mode`.
 struct ParticipantOptions {
@@ -228,7 +242,11 @@ struct ParticipantOptions {
 // C++ port of the entity-lifecycle and best-effort-dispatch portions of
 // go-DDS's rtps.participant — see the file-level scope note for exactly
 // what is and is not ported at this phase.
-class Participant : public IParticipant, public std::enable_shared_from_this<Participant> {
+class Participant : public IParticipant
+                   , public relay::IMetricsProvider
+                   , public relay::IDiscoveryMetricsProvider
+                   , public relay::ITopicMetricsProvider
+                   , public std::enable_shared_from_this<Participant> {
 public:
     // Binds sockets, starts SPDP/SEDP and the participant's own receive/
     // bridge threads, and returns a ready-to-use participant. Returns
@@ -255,6 +273,17 @@ public:
     Domain domain() const noexcept override { return domain_; }
 
     std::error_code close() override;
+
+    // ── relay::IMetricsProvider / IDiscoveryMetricsProvider /
+    //    ITopicMetricsProvider ────────────────────────────────────────────
+    // C++ port of go-DDS's rtps.participant Metrics/DiscoveryMetrics/
+    // TopicMetrics methods (rtps/participant.go). Unlike dds::mock (which
+    // has no real network discovery), discovery_metrics() here is sourced
+    // from live SpdpService/SedpService state — see participant.cpp.
+
+    relay::Metrics metrics() const override;
+    relay::DiscoveryMetrics discovery_metrics() const override;
+    std::vector<relay::TopicMetrics> topic_metrics() const override;
 
     // ── Inspection (tests, and future wiring into the public API) ──────────
 
@@ -307,6 +336,16 @@ private:
 
     const std::string& persist_dir() const noexcept { return persist_dir_; }
     std::chrono::milliseconds heartbeat_period() const noexcept { return heartbeat_period_; }
+
+    // ── metrics bookkeeping (used by Writer::write and Participant::dispatch)
+
+    // Returns (creating if necessary) the per-topic counter for topic.
+    // Matches go-DDS's participant.topicCounterFor.
+    std::shared_ptr<TopicCounter> topic_counter_for(const std::string& topic);
+
+    // Records one write of byte_len bytes on topic — both the participant-
+    // level and per-topic write counters. Called by Writer::write.
+    void record_write(const std::string& topic, std::size_t byte_len);
 
     // ── reliable delivery (Tier-1 phase 7) ──────────────────────────────
     // See reliable.hpp / types.hpp (Heartbeat/AckNack/Gap) and
@@ -398,6 +437,24 @@ private:
 
     mutable std::mutex                       last_mu_;
     std::unordered_map<std::string, Sample>  last_samples_;
+
+    // ── metrics (fusa:req REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-005) ─
+    // Participant-level counters, matching go-DDS's mWrites/mDelivers/
+    // mDrops/mBytesWritten/mBytesDeliv (rtps/participant.go). Incremented by
+    // Writer::write (write_count_/bytes_written_) and Participant::dispatch
+    // (deliver_count_/drop_count_/bytes_delivered_).
+    std::atomic<uint64_t> write_count_{0};
+    std::atomic<uint64_t> bytes_written_{0};
+    std::atomic<uint64_t> deliver_count_{0};
+    std::atomic<uint64_t> drop_count_{0};
+    std::atomic<uint64_t> bytes_delivered_{0};
+
+    // Per-topic metrics: topic string -> TopicCounter, matching go-DDS's
+    // topicMetrics sync.Map (rtps/participant.go). A plain mutex-guarded map
+    // is used here (rather than attempting a lock-free structure) — matches
+    // the same pattern already used by readers_/writers_/last_samples_ above.
+    mutable std::mutex                                              topic_metrics_mu_;
+    std::unordered_map<std::string, std::shared_ptr<TopicCounter>> topic_metrics_;
 
     std::chrono::milliseconds bridge_poll_period_{200};
     std::atomic<bool>         bridge_running_{false};

@@ -235,6 +235,49 @@ public:
     virtual Metrics metrics() const = 0;
 };
 
+// ── Discovery metrics ─────────────────────────────────────────────────────────
+// C++ port of go-DDS's dds.DiscoveryMetrics / dds.DiscoveryMetricsProvider
+// (dds.go). Cumulative discovery-layer statistics for a participant.
+// fusa:req REQ-METRICS-004
+struct DiscoveryMetrics {
+    uint64_t announces_sent{};     // SPDP announcements sent
+    uint64_t announces_received{}; // SPDP announcements received from remote peers
+    uint64_t peers_known{};        // current number of known remote participants
+    uint64_t peer_evictions{};     // cumulative peers evicted due to lease expiry
+    uint64_t endpoint_matches{};   // cumulative topic endpoint matches (local<->remote)
+};
+
+// IDiscoveryMetricsProvider is implemented by participants that expose
+// discovery-layer statistics.
+// fusa:req REQ-METRICS-004
+class IDiscoveryMetricsProvider {
+public:
+    virtual ~IDiscoveryMetricsProvider() = default;
+    virtual DiscoveryMetrics discovery_metrics() const = 0;
+};
+
+// ── Per-topic metrics ─────────────────────────────────────────────────────────
+// C++ port of go-DDS's dds.TopicMetrics / dds.TopicMetricsProvider (dds.go).
+// Per-topic statistics for a single DDS topic.
+// fusa:req REQ-METRICS-005
+struct TopicMetrics {
+    std::string topic;
+    uint64_t    write_count{};
+    uint64_t    deliver_count{};
+    uint64_t    drop_count{};
+    uint64_t    bytes_written{};
+    uint64_t    bytes_delivered{};
+};
+
+// ITopicMetricsProvider is implemented by participants that expose per-topic
+// statistics. The returned vector contains one entry per observed topic.
+// fusa:req REQ-METRICS-005
+class ITopicMetricsProvider {
+public:
+    virtual ~ITopicMetricsProvider() = default;
+    virtual std::vector<TopicMetrics> topic_metrics() const = 0;
+};
+
 // fusa:req REQ-RELAY-028
 class IDrainer {
 public:

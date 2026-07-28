@@ -14,7 +14,7 @@
 #include <vector>
 
 // fusa:req REQ-MOCK-001 REQ-MOCK-002 REQ-MOCK-003 REQ-MOCK-004 REQ-MOCK-005
-// fusa:req REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003
+// fusa:req REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003 REQ-METRICS-004 REQ-METRICS-005
 // fusa:req REQ-HEALTH-001 REQ-HEALTH-002
 // fusa:req REQ-DDS-010 REQ-SEC-004 REQ-SEC-005 REQ-LIFECYCLE-001 REQ-LIFECYCLE-002
 // fusa:req REQ-LIFECYCLE-003 REQ-LIFECYCLE-004 REQ-LIFECYCLE-005
@@ -39,6 +39,19 @@ struct ParticipantCounters {
     std::atomic<uint64_t> drop_count{0};
     std::atomic<uint64_t> bytes_delivered{0};
     std::atomic<uint64_t> error_count{0};
+};
+
+// ── Per-topic metrics counters ────────────────────────────────────────────────
+
+// TopicCounters accumulates per-topic write/deliver/drop statistics in the
+// broker. C++ port of go-DDS's mockTopicCounter (mock/mock.go).
+// fusa:req REQ-METRICS-005
+struct TopicCounters {
+    std::atomic<uint64_t> write_count{0};
+    std::atomic<uint64_t> bytes_written{0};
+    std::atomic<uint64_t> deliver_count{0};
+    std::atomic<uint64_t> drop_count{0};
+    std::atomic<uint64_t> bytes_delivered{0};
 };
 
 // ── Broker ────────────────────────────────────────────────────────────────────
@@ -152,12 +165,35 @@ public:
         return it->second;
     }
 
+    // topic_counter_for returns (creating on first access) the per-topic
+    // counter for topic. C++ port of go-DDS's broker.topicCounterFor.
+    // fusa:req REQ-METRICS-005
+    std::shared_ptr<TopicCounters> topic_counter_for(const std::string& topic) {
+        std::lock_guard<std::mutex> lk(topic_mu_);
+        auto it = topic_counters_.find(topic);
+        if (it != topic_counters_.end()) return it->second;
+        auto tc = std::make_shared<TopicCounters>();
+        topic_counters_.emplace(topic, tc);
+        return tc;
+    }
+
+    // topic_counters_snapshot returns a copy of the topic -> counters map
+    // (the shared_ptrs themselves are shared, not copied — safe to read
+    // concurrently with topic_counter_for's own locked mutations).
+    std::unordered_map<std::string, std::shared_ptr<TopicCounters>> topic_counters_snapshot() const {
+        std::lock_guard<std::mutex> lk(topic_mu_);
+        return topic_counters_;
+    }
+
 private:
     mutable std::shared_mutex                                        mu_;
     std::unordered_map<std::string, std::vector<SubscriptionEntry>> subs_;
 
     mutable std::shared_mutex                    last_mu_;
     std::unordered_map<std::string, Sample>      last_samples_;
+
+    mutable std::mutex                                              topic_mu_;
+    std::unordered_map<std::string, std::shared_ptr<TopicCounters>> topic_counters_;
 };
 
 // ── MockPublisher ──────────────────────────────────────────────────────────────
@@ -208,6 +244,20 @@ public:
         ctrs_->drop_count      += static_cast<uint64_t>(stats.dropped);
         ctrs_->bytes_delivered += static_cast<uint64_t>(stats.bytes)
                                   * static_cast<uint64_t>(stats.delivered);
+
+        // Per-topic metrics (fusa:req REQ-METRICS-005). Broker::publish only
+        // ever fans out within topic_'s own subscription bucket (this mock
+        // has no wildcard-topic subscription support), so the DeliveryStats
+        // above are entirely attributable to topic_ — unlike go-DDS's mock,
+        // which must re-derive per-topic counts from each individual
+        // sub.filter/backpressure branch to account for wildcard fan-out.
+        auto tc = broker_.topic_counter_for(topic_);
+        tc->write_count++;
+        tc->bytes_written   += payload.size();
+        tc->deliver_count   += static_cast<uint64_t>(stats.delivered);
+        tc->drop_count      += static_cast<uint64_t>(stats.dropped);
+        tc->bytes_delivered += static_cast<uint64_t>(stats.bytes)
+                               * static_cast<uint64_t>(stats.delivered);
         return {};
     }
 
@@ -350,6 +400,34 @@ public:
         m.bytes_delivered = ctrs_->bytes_delivered.load();
         m.error_count     = ctrs_->error_count.load();
         return m;
+    }
+
+    // ── IDiscoveryMetricsProvider ─────────────────────────────────────────────
+
+    // The mock has no real network discovery (every participant sharing this
+    // process-global broker is trivially "discovered"); this always returns
+    // zero values, matching go-DDS's mock.participant.DiscoveryMetrics.
+    // fusa:req REQ-METRICS-004
+    relay::DiscoveryMetrics discovery_metrics() const override {
+        return relay::DiscoveryMetrics{};
+    }
+
+    // ── ITopicMetricsProvider ─────────────────────────────────────────────────
+
+    // fusa:req REQ-METRICS-005
+    std::vector<relay::TopicMetrics> topic_metrics() const override {
+        std::vector<relay::TopicMetrics> result;
+        for (auto& [topic, tc] : broker_.topic_counters_snapshot()) {
+            relay::TopicMetrics m;
+            m.topic           = topic;
+            m.write_count     = tc->write_count.load();
+            m.deliver_count   = tc->deliver_count.load();
+            m.drop_count      = tc->drop_count.load();
+            m.bytes_written   = tc->bytes_written.load();
+            m.bytes_delivered = tc->bytes_delivered.load();
+            result.push_back(std::move(m));
+        }
+        return result;
     }
 
     // ── IHealthProvider ───────────────────────────────────────────────────────

@@ -15,18 +15,28 @@
 #include <memory>
 
 // fusa:req REQ-MOCK-001 REQ-MOCK-002 REQ-MOCK-003 REQ-MOCK-004 REQ-MOCK-005
-// fusa:req REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003
+// fusa:req REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003 REQ-METRICS-004 REQ-METRICS-005
 // fusa:req REQ-HEALTH-001 REQ-HEALTH-002
 
 namespace dds::mock {
 
 // IMockParticipant extends IParticipant with the optional RELAY capability
-// interfaces: IMetricsProvider, IHealthProvider, and IDrainer. Callers can
-// use the concrete type directly without dynamic_cast.
-// fusa:req REQ-MOCK-001 REQ-METRICS-003 REQ-HEALTH-001
+// interfaces: IMetricsProvider, IDiscoveryMetricsProvider,
+// ITopicMetricsProvider, IHealthProvider, and IDrainer. Callers can use the
+// concrete type directly without dynamic_cast.
+//
+// IDiscoveryMetricsProvider::discovery_metrics() always returns a
+// zero-valued relay::DiscoveryMetrics here: the mock has no real network
+// discovery (all participants sharing a process-global Broker are
+// trivially "discovered"), matching go-DDS's mock.participant.DiscoveryMetrics
+// doc comment verbatim ("The mock has no real network discovery; this
+// always returns zero values").
+// fusa:req REQ-MOCK-001 REQ-METRICS-003 REQ-METRICS-004 REQ-METRICS-005 REQ-HEALTH-001
 class IMockParticipant
     : public IParticipant
     , public relay::IMetricsProvider
+    , public relay::IDiscoveryMetricsProvider
+    , public relay::ITopicMetricsProvider
     , public relay::IHealthProvider
     , public relay::IDrainer
 {

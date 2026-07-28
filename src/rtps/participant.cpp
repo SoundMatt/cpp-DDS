@@ -209,20 +209,32 @@ public:
         return t;
     }
 
+    // DeliverResult reports what deliver() actually did, so callers (i.e.
+    // Participant::dispatch) can attribute metrics correctly: a Filtered
+    // sample was never a delivery attempt at all — matching go-DDS's
+    // dispatchToReaders, whose own reader-filter check happens *before*
+    // calling deliverToReader (the metrics-counting function), so a
+    // filtered-out sample never touches mDelivers/mDrops either.
+    enum class DeliverResult { Filtered, Delivered, Dropped };
+
     // Applies the sample filter (if any) and enqueues per back_pressure_.
-    void deliver(const Sample& s) {
-        if (filter_ && !filter_(s)) return;
+    // Matches go-DDS's rtpsReader delivery path inlined into
+    // participant.deliverToReader.
+    DeliverResult deliver(const Sample& s) {
+        if (filter_ && !filter_(s)) return DeliverResult::Filtered;
+        bool delivered = false;
         switch (back_pressure_) {
             case relay::BackPressurePolicy::DropOldest:
-                ch_->send_drop_oldest(s);
+                delivered = ch_->send_drop_oldest(s);
                 break;
             case relay::BackPressurePolicy::Block:
-                ch_->send(s);
+                delivered = ch_->send(s);
                 break;
             default: // DropNewest
-                ch_->try_send(s);
+                delivered = (ch_->try_send(s) == dds::Chan<Sample>::SendResult::Ok);
                 break;
         }
+        return delivered ? DeliverResult::Delivered : DeliverResult::Dropped;
     }
 
     // Closes the channel directly (used by Participant::close() to
@@ -296,6 +308,12 @@ public:
         const auto     now = std::chrono::system_clock::now();
         const GUID     source{p_->guid_prefix(), eid_};
         const SequenceNumber seq_num = u64_to_sn(seq);
+
+        // Metrics: write_count_/bytes_written_ (participant-level) and this
+        // topic's TopicCounter — matches go-DDS's w.p.mWrites.Add(1) /
+        // topicTC.writes.Add(1) at the top of rtpsWriter.Write.
+        // fusa:req REQ-METRICS-001 REQ-METRICS-005
+        p_->record_write(topic_, payload.size());
 
         // Build wire bytes from existing, already byte-verified primitives
         // only (cdr_wrap_payload from phase 2, DataSubmessage::encode from
@@ -764,7 +782,34 @@ void Participant::dispatch(const GUID& source, const std::string& topic_filter,
         s.timestamp        = ts;
         s.sequence_number  = seq_num;
         s.writer_guid      = writer_dds;
-        r->deliver(s);
+
+        // Metrics: deliver_count_/drop_count_ (participant-level) and
+        // r->topic()'s TopicCounter — matches go-DDS's
+        // deliverToReader/topicCounterFor. A Filtered result means the
+        // reader's own filter rejected the sample *before* an enqueue was
+        // even attempted, so (matching go-DDS's dispatchToReaders, whose
+        // filter check happens before calling deliverToReader at all) it is
+        // not counted as either a delivery or a drop.
+        // fusa:req REQ-METRICS-002 REQ-METRICS-005
+        const auto byte_len = static_cast<uint64_t>(payload.size());
+        switch (r->deliver(s)) {
+        case Reader::DeliverResult::Delivered: {
+            deliver_count_.fetch_add(1);
+            bytes_delivered_.fetch_add(byte_len);
+            auto tc = topic_counter_for(r->topic());
+            tc->deliver_count.fetch_add(1);
+            tc->bytes_delivered.fetch_add(byte_len);
+            break;
+        }
+        case Reader::DeliverResult::Dropped: {
+            drop_count_.fetch_add(1);
+            auto tc = topic_counter_for(r->topic());
+            tc->drop_count.fetch_add(1);
+            break;
+        }
+        case Reader::DeliverResult::Filtered:
+            break;
+        }
     }
 }
 
@@ -802,6 +847,81 @@ std::optional<Sample> Participant::last_sample(const std::string& topic) const {
     auto                          it = last_samples_.find(topic);
     if (it == last_samples_.end()) return std::nullopt;
     return it->second;
+}
+
+// ── metrics (relay::IMetricsProvider / IDiscoveryMetricsProvider /
+//    ITopicMetricsProvider) ───────────────────────────────────────────────────
+// C++ port of go-DDS's rtps.participant Metrics/DiscoveryMetrics/TopicMetrics
+// (rtps/participant.go) — see participant.hpp's file-level scope note.
+
+// Returns (creating if necessary) the per-topic counter for topic. Matches
+// go-DDS's participant.topicCounterFor.
+// fusa:req REQ-METRICS-005
+std::shared_ptr<TopicCounter> Participant::topic_counter_for(const std::string& topic) {
+    std::lock_guard<std::mutex> lock(topic_metrics_mu_);
+    auto it = topic_metrics_.find(topic);
+    if (it != topic_metrics_.end()) return it->second;
+    auto tc = std::make_shared<TopicCounter>();
+    topic_metrics_.emplace(topic, tc);
+    return tc;
+}
+
+// Records one write of byte_len bytes on topic. Matches go-DDS's
+// w.p.mWrites.Add(1) / w.p.mBytesWritten.Add(...) / topicTC.writes.Add(1) /
+// topicTC.bytesW.Add(...) at the top of rtpsWriter.Write.
+// fusa:req REQ-METRICS-001 REQ-METRICS-005
+void Participant::record_write(const std::string& topic, std::size_t byte_len) {
+    write_count_.fetch_add(1);
+    bytes_written_.fetch_add(byte_len);
+    auto tc = topic_counter_for(topic);
+    tc->write_count.fetch_add(1);
+    tc->bytes_written.fetch_add(byte_len);
+}
+
+// fusa:req REQ-METRICS-001
+relay::Metrics Participant::metrics() const {
+    relay::Metrics m;
+    m.write_count     = write_count_.load();
+    m.deliver_count    = deliver_count_.load();
+    m.drop_count       = drop_count_.load();
+    m.bytes_written    = bytes_written_.load();
+    m.bytes_delivered  = bytes_delivered_.load();
+    return m;
+}
+
+// discovery_metrics is sourced from live SpdpService/SedpService state — the
+// one place this port genuinely improves on dds::mock's necessarily-zeroed
+// equivalent (the mock has no real network discovery to source counters
+// from at all). Matches go-DDS's rtps.participant.DiscoveryMetrics exactly:
+// spdp_'s announce/eviction counters and current peer count, sedp_'s
+// cumulative endpoint-match counter.
+// fusa:req REQ-METRICS-004
+relay::DiscoveryMetrics Participant::discovery_metrics() const {
+    relay::DiscoveryMetrics m;
+    m.announces_sent     = spdp_->announces_sent();
+    m.announces_received = spdp_->announces_received();
+    m.peers_known         = spdp_->peers().size();
+    m.peer_evictions       = spdp_->peer_evictions();
+    m.endpoint_matches      = sedp_->endpoint_matches();
+    return m;
+}
+
+// fusa:req REQ-METRICS-005
+std::vector<relay::TopicMetrics> Participant::topic_metrics() const {
+    std::vector<relay::TopicMetrics> result;
+    std::lock_guard<std::mutex> lock(topic_metrics_mu_);
+    result.reserve(topic_metrics_.size());
+    for (const auto& [topic, tc] : topic_metrics_) {
+        relay::TopicMetrics m;
+        m.topic           = topic;
+        m.write_count     = tc->write_count.load();
+        m.deliver_count   = tc->deliver_count.load();
+        m.drop_count      = tc->drop_count.load();
+        m.bytes_written   = tc->bytes_written.load();
+        m.bytes_delivered = tc->bytes_delivered.load();
+        result.push_back(std::move(m));
+    }
+    return result;
 }
 
 // ── data receive loop ────────────────────────────────────────────────────────
