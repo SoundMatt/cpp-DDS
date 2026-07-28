@@ -6,6 +6,26 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.14.0] — 2026-07-28
+
+### Added
+
+- `dds::IMetricsProvider` / `dds::Metrics`, `dds::IDiscoveryMetricsProvider` /
+  `dds::DiscoveryMetrics`, and `dds::ITopicMetricsProvider` / `dds::TopicMetrics`
+  (`include/dds/dds.hpp`) — field-for-field ports of go-DDS's `dds.go` metrics-provider
+  interfaces (#26). Implemented by `dds::mock::IMockParticipant` (per-topic counter table
+  added; `discovery_metrics()` always zero-valued — no real network discovery in the
+  mock) and `dds::rtps::Participant` (new participant-level and per-topic atomic
+  counters wired into `Writer::write()`/`Participant::dispatch()`; `discovery_metrics()`
+  sourced live from the existing `SpdpService`/`SedpService` counters). The DDS-scoped
+  accessor is named `dds_metrics()` rather than `metrics()`, since C++ virtual dispatch
+  cannot have two unrelated base classes both declare `metrics()` with different return
+  types on the same derived class, and `dds::mock::IMockParticipant` already implements
+  `relay::IMetricsProvider::metrics()`. Internal/additive only — not yet wired into
+  `dds::adapt()`'s `relay::INode` bridge or the CLI's `optional_interfaces` list (that
+  layer is go-DDS's `monitor`/`admin` equivalent, Tier 5, still deferred).
+- `requirements/requirements.json`: REQ-METRICS-004/005/006, traced and tested.
+
 ## [0.13.0] — 2026-07-27
 
 ### Added
