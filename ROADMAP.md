@@ -770,11 +770,69 @@ it:
   precedent for this repo's C++20 CI-leg quirk) and a Debug ASan/UBSan pass on
   macOS/AppleClang; CI additionally exercises Linux/gcc-12 ASan+UBSan. `REQ-IDL-001`
   through `REQ-IDL-009` added, traced and tested.
-- **`tsn`** — TSN (802.1) QoS fields: transport priority, latency budget, TAPRIO
+- [x] **`tsn`** — TSN (802.1) QoS fields: transport priority, latency budget, TAPRIO
   integration. go-DDS's `tsn` package is Linux-specific with a `!linux` build-tag stub
-  for other platforms (824 LOC) — cpp-DDS should follow the same platform-gated pattern
-  (e.g. `#ifdef __linux__` plus a portable no-op stub TU), not attempt TAPRIO on macOS
-  or Windows.
+  for other platforms — cpp-DDS follows the same platform-gated pattern, not attempting
+  TAPRIO on macOS or Windows.
+  **Done (v0.22.0):** `include/dds/tsn/tsn.hpp` + `src/tsn/tsn.cpp` — `dds::tsn::Stream`/
+  `StreamConfig`, a C++ port of go-DDS's `tsn/tsn.go`, with `load_config()`/
+  `parse_config()` parsing the identical JSON `tsn_streams` shape (topic/vid/pcp/dscp/
+  max_frame_size/max_interval_frames/interval_us/tx_offset_us/talker_id) via a small
+  internal recursive-descent JSON reader scoped to exactly this config shape (not a
+  general-purpose library dependency, matching `dds::idl`'s own lexer/`cli/json_lite.hpp`
+  precedent), plus `to_json()` for round trips. `include/dds/rtps/tsn.hpp` mirrors
+  go-DDS's `rtps/tsn.go` split exactly: a dependency-leaf `TSNParams`/`TSNStreamConfig`
+  interface inside `dds::rtps` itself, so `dds::rtps` never depends on `dds::tsn`;
+  `dds::tsn::StreamConfigAdapter`/`with_stream_config()` is the supported adapter,
+  assigned to the new `ParticipantOptions::tsn_config` field. `include/dds/tsn/
+  taprio.hpp` + `src/tsn/taprio.cpp` — `TAPRIOEntry`/`TAPRIOConfig` (gate control list,
+  `cycle_duration()`/`validate()`/`tc_command()`) plus `taprio_from_streams()`, all
+  portable; `src/tsn/taprio_linux.cpp` (compiled only when `CMAKE_SYSTEM_NAME` is
+  `"Linux"`, mirroring Tier-1 phase 3's `traffic_linux.cpp`/`traffic_other.cpp`
+  `CMakeLists.txt` split) programs and verifies the real Linux `taprio` qdisc via
+  hand-built `RTM_NEWQDISC`/`RTM_GETQDISC` netlink messages over `NETLINK_ROUTE` — a
+  byte-for-byte port of go-DDS's `tsn/taprio_linux.go` attribute layout (TCA_KIND/
+  TCA_OPTIONS/TCA_TAPRIO_ATTR_\*/TCA_TAPRIO_SCHED_ENTRY_\* IDs, NLM flags, message
+  ordering all cross-checked field-by-field against a fresh go-DDS clone — there is no
+  RTPS wire format involved here, so netlink-attribute-layout exactness is this item's
+  equivalent of a byte-exact vector); `src/tsn/taprio_other.cpp` returns a documented
+  "requires Linux" diagnostic everywhere else. Neither `apply()` nor any other TSN code
+  is called automatically by `dds::rtps::Participant` for qdisc configuration — matching
+  go-DDS's own participant.go, which never calls `TAPRIOConfig.Apply` either; that stays
+  an explicit, privileged, out-of-band operator action. Real `Participant`/`Writer`
+  wiring (not just types): `ParticipantOptions::tsn_config` set → `new_publisher`
+  resolves each writer's topic against it (config match takes priority,
+  `QoS::transport_priority` — a field that already existed in `dds.hpp` — is the
+  fallback PCP selector when no entry matches, exactly mirroring go-DDS's `NewPublisher`
+  "Wire TSN stream" block) and lazily creates/reuses one dedicated `UdpSocket` per
+  distinct PCP value (`Participant::tsn_socket_for_pcp`, matching go-DDS's
+  `tsnSocketForPCP`), configured via the *already-existing* (Tier-1 phase 3)
+  `dds::rtps::traffic.hpp` hooks (`set_sock_priority`/`set_sock_tos`/`enable_tx_time`) —
+  those hooks had no caller anywhere in the codebase before this item, by design (see
+  `traffic.hpp`'s own file-level scope note: "these hooks are unused... they exist for
+  later TSN integration... to call into"). `Writer::write()`/`send_heartbeat()` route
+  through that dedicated socket via a new `send_via` helper (falling back to the shared
+  `data_sock_` when unconfigured) and, for a stream with a nonzero `tx_offset`, compute a
+  `SO_TXTIME` launch time (next interval boundary + `tx_offset`, `CLOCK_TAI`) and send via
+  `scheduled_send` — matching go-DDS's `Write()`/`sendHeartbeatLocked()` exactly, down to
+  ACKNACK-triggered retransmission and GAP deliberately *not* routing through the TSN
+  socket (confirmed against a fresh go-DDS clone: `handleAckNack` unconditionally uses
+  `p.dataSock`, never `sendSock()`). A TSN stream's `max_frag_payload()` (`max_frame_size
+  - 48`, 0 when unset) overrides `fragment.hpp`'s default `kMaxFragmentPayload` as this
+  writer's fragmentation threshold end-to-end (`build_data_messages` gained a `frag_size`
+  parameter). Verified with 4 new cross-participant, real-loopback-UDP end-to-end tests
+  (`tests/test_rtps_tsn.cpp`) proving delivery still succeeds correctly when routed
+  through the dedicated TSN socket (config match, `QoS::transport_priority` fallback,
+  TSN-forced `DATA_FRAG` fragmentation and reassembly, and PCP-socket sharing across
+  writers) plus 45 unit tests (`tests/test_tsn.cpp` mirroring go-DDS's `tsn_test.go`
+  matrix, `tests/test_taprio.cpp` mirroring `taprio_test.go` plus `tc_command`/
+  `taprio_from_streams` coverage) — 540/540 tests total, verified locally with Release
+  C++17/C++20 builds and a Debug ASan/UBSan pass on both macOS and a real Ubuntu-22.04/
+  gcc-12 Docker container (exercising the actual Linux netlink code path, not just the
+  portable stub); CI additionally exercises Linux/gcc-12 ASan+UBSan and the full
+  cross-platform matrix (ubuntu/macos/windows). `REQ-TSN-001` through `REQ-TSN-007`
+  added, traced and tested. This is the last remaining item of Tier 3 (`xtypes` v0.19.0,
+  `idl` v0.21.0, `cdr` v0.20.0, `tsn` v0.22.0 — all now done).
 
 ## Tier 4 — bridges (v0.5.0)
 

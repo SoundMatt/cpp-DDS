@@ -25,6 +25,9 @@ add_executable(cppdds_tests
     test_idl.cpp
     test_ddstool_cli.cpp
     idl_roundtrip/test_idl_roundtrip.cpp
+    test_tsn.cpp
+    test_taprio.cpp
+    test_rtps_tsn.cpp
 )
 
 target_link_libraries(cppdds_tests

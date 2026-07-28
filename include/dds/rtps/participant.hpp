@@ -38,8 +38,11 @@
 // integration depth: only the user-data socket is wired into the receive
 // path, and outbound replies still always go via the IPv4 socket — see
 // this file's own scope note below and transport.hpp's file-level note for
-// the full detail. Still out of scope: no
-// security/TSN (Tier 2/3), no INFO_TS-carried publish
+// the full detail. TSN-socket wiring (Tier 3, "tsn" —
+// ParticipantOptions::tsn_config, see that field's own doc comment and
+// include/dds/tsn/tsn.hpp) is now in scope; go-DDS's security-plugin and
+// anti-replay portions of participant.go remain explicitly out of scope
+// (Tier 2). Still out of scope: no INFO_TS-carried publish
 // timestamps (Sample::timestamp is always the local wall-clock time of
 // publish/receipt — every wire primitive this phase composes — DataSubmessage,
 // cdr_wrap_payload, wrap_in_rtps_message, Heartbeat/AckNack/Gap::encode —
@@ -52,13 +55,15 @@
 // rtps/participant.go (`participant`, `rtpsWriter`, `rtpsReader` and their
 // methods) plus rtps/reliable.go and rtps/persist.go, plus (Tier-1 phase
 // 10) the `ipv6`-flag portion of participant.go's option handling and
-// newParticipant's "Optional IPv6 sockets" block — the TSN-socket,
-// security-plugin, and anti-replay portions of participant.go remain
-// explicitly out of scope here; see the roadmap phase list for where each
-// lands. Also out of scope: go-DDS's `waitDrain`/`CloseWithDrain`
-// (blocking until all writes are ACKed) — not required by this phase's
-// roadmap text and not exposed anywhere yet; can be added if a later phase
-// needs it.
+// newParticipant's "Optional IPv6 sockets" block, plus (Tier 3, "tsn") the
+// `tsnSock`/`tsnStream`/`tsnSocketForPCP` portions of participant.go's
+// writer construction and Write()/sendHeartbeatLocked()/handleAckNack()
+// send paths — go-DDS's security-plugin and anti-replay portions of
+// participant.go remain explicitly out of scope here; see the roadmap
+// phase list for where each lands. Also out of scope: go-DDS's
+// `waitDrain`/`CloseWithDrain` (blocking until all writes are ACKed) — not
+// required by this phase's roadmap text and not exposed anywhere yet; can
+// be added if a later phase needs it.
 //
 // Scope notes (deliberate deviations from a literal line-for-line port):
 //
@@ -154,6 +159,20 @@
 //     SpdpService/SedpService's own two-instance convergence tests already
 //     rely on (see their file-level scope notes). Production participants
 //     MUST leave this false.
+//   - `ParticipantOptions::tsn_config` (Tier 3, "tsn") is this port's
+//     equivalent of go-DDS's `WithTSNConfig` option: matching go-DDS's own
+//     `participant.tsnSocks` design (a `map[uint8]*udpSocket` keyed by
+//     PCP, lazily populated), `Participant::tsn_socket_for_pcp` creates and
+//     caches one dedicated `UdpSocket` per distinct PCP value the first
+//     time a writer resolves to it, rather than one socket per writer —
+//     multiple writers sharing a PCP share a socket. Cross-process/
+//     cross-host TSN traffic-class marking (SO_PRIORITY/IP_TOS/SO_TXTIME —
+//     see rtps/traffic.hpp) is thus real starting at the first TSN-aware
+//     `new_publisher` call; unlike go-DDS, there is no user-data multicast
+//     send path in this port at all (every writer, TSN or not, unicasts to
+//     every SEDP-matched reader locator — see `Writer::write`'s own
+//     scope note), so go-DDS's
+//     `useMulticast := ... && w.tsnSock == nil` gating has no analog here.
 
 #pragma once
 
@@ -162,9 +181,11 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <dds/dds.hpp>
@@ -175,6 +196,7 @@
 #include <dds/rtps/sedp.hpp>
 #include <dds/rtps/spdp.hpp>
 #include <dds/rtps/transport.hpp>
+#include <dds/rtps/tsn.hpp>
 #include <dds/rtps/types.hpp>
 
 namespace dds::rtps {
@@ -219,6 +241,26 @@ struct ParticipantOptions {
     // this is set. Every OS-level IPv6 bind failure under this flag is
     // soft — participant creation still succeeds with IPv4 only.
     bool ipv6{false};
+
+    // TSN stream configuration (Tier 3, "tsn" — see include/dds/tsn/tsn.hpp
+    // and include/dds/rtps/tsn.hpp). When set, every new_publisher() call
+    // resolves the topic against tsn_config first; on a match, the writer
+    // sends on a dedicated, priority-marked UDP socket (SO_PRIORITY =
+    // stream PCP, IP_TOS = stream DSCP<<2, SO_TXTIME enabled when the
+    // stream's tx_offset is nonzero) instead of the shared data_sock_, and
+    // uses the stream's max_frag_payload (when nonzero) as its
+    // fragmentation bound instead of fragment.hpp's kMaxFragmentPayload.
+    // When tsn_config is null (the default) or has no entry for a topic,
+    // QoS::transport_priority > 0 (include/dds/dds.hpp) is used as a
+    // fallback PCP selector (DSCP 0, no scheduled transmit) — matching
+    // go-DDS's rtpsWriter construction exactly ("config match takes
+    // priority, TransportPriority QoS field acts as a fallback PCP
+    // selector when no config entry exists"). QoS::latency_budget remains
+    // purely informational (nothing reads it), matching go-DDS.
+    // One dedicated socket is created per distinct PCP value (0-7) and
+    // reused across every writer that resolves to that PCP — mirrors
+    // go-DDS's participant.tsnSocketForPCP.
+    std::shared_ptr<TSNStreamConfig> tsn_config;
 };
 
 // Participant is a working dds::IParticipant backed by real RTPS/UDP:
@@ -322,6 +364,21 @@ private:
                    std::chrono::system_clock::time_point ts, uint64_t seq_num);
 
     bool send_data(const std::string& dst_address, int dst_port, const std::vector<uint8_t>& msg);
+
+    // Resolves topic/qos against tsn_config_ (config match) or
+    // qos.transport_priority (fallback), returning the matching
+    // TSNParams and the dedicated priority-marked socket to send on, or
+    // {nullopt, nullptr} when neither applies. Matches go-DDS's
+    // NewPublisher "Wire TSN stream" block — see
+    // ParticipantOptions::tsn_config's doc comment.
+    std::pair<std::optional<TSNParams>, UdpSocket*> resolve_tsn(const std::string& topic, const QoS& qos);
+
+    // tsn_socket_for_pcp returns the dedicated UdpSocket for pcp, creating
+    // and configuring it (SO_PRIORITY=pcp, IP_TOS=dscp<<2 when dscp>0,
+    // SO_TXTIME enabled when want_tx_time) on first use. Returns nullptr
+    // on socket-bind failure; callers fall back to the shared data_sock_.
+    // Matches go-DDS's participant.tsnSocketForPCP.
+    UdpSocket* tsn_socket_for_pcp(uint8_t pcp, uint8_t dscp, bool want_tx_time);
 
     void register_reader(const EntityId& eid, const std::shared_ptr<Reader>& r);
     void unregister_reader(const EntityId& eid);
@@ -428,6 +485,16 @@ private:
     // fragment.hpp's file-level scope note for why this is wired into the
     // receive path even though go-DDS's own participant.go never does.
     FragmentAssembler frag_assembler_;
+
+    // TSN stream configuration and per-PCP dedicated sockets (Tier 3,
+    // "tsn" — see ParticipantOptions::tsn_config's doc comment and
+    // resolve_tsn/tsn_socket_for_pcp above). tsn_config_ is null unless
+    // ParticipantOptions::tsn_config was set at create(). tsn_socks_ is
+    // populated lazily, one entry per distinct PCP value actually used by
+    // a writer (matches go-DDS's participant.tsnSocks).
+    std::shared_ptr<TSNStreamConfig>            tsn_config_;
+    mutable std::mutex                          tsn_mu_;
+    std::unordered_map<uint8_t, UdpSocket>      tsn_socks_;
 
     std::unique_ptr<SpdpService> spdp_;
     std::unique_ptr<SedpService> sedp_;

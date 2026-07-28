@@ -858,5 +858,79 @@
     "standards": [
       "go-DDS tools/cmd/ddstool/main.go runIDL"
     ]
+  },
+  {
+    "id": "REQ-TSN-001",
+    "title": "TSN stream descriptor and StreamConfig JSON loading",
+    "text": "The system shall define dds::tsn::Stream (topic, vid, pcp, dscp, max_frame_size, max_interval_frames, interval_us, tx_offset_us, talker_id) and dds::tsn::StreamConfig (a vector of Stream plus stream_for_topic()/topics()/to_json()), and load_config()/parse_config() functions that parse a JSON tsn_streams document into a StreamConfig, validating topic non-empty, PCP in 0\u20137, DSCP in 0\u201363, and max_frame_size/max_interval_frames/interval_us/tx_offset_us all \u2265 0, returning a diagnostic on any violation or malformed JSON.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS tsn/tsn.go",
+      "OMG DDS-TSN ptc/2021-03-01"
+    ]
+  },
+  {
+    "id": "REQ-TSN-002",
+    "title": "TSNStreamConfig resolution and Participant wiring",
+    "text": "The system shall define dds::rtps::TSNParams and the dds::rtps::TSNStreamConfig interface (stream_for_topic(topic, out)), dds::tsn::StreamConfigAdapter/with_stream_config() adapting a StreamConfig to that interface, and ParticipantOptions::tsn_config: when set, dds::rtps::Participant::new_publisher shall resolve each new writer's topic against it and, on a match, route that writer's remote DATA and HEARTBEAT sends through a dedicated UDP socket with SO_PRIORITY set to the stream's PCP and IP_TOS set to the stream's DSCP<<2, reusing one socket per distinct PCP value across writers.",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS rtps/tsn.go, rtps/participant.go NewPublisher/tsnSocketForPCP"
+    ]
+  },
+  {
+    "id": "REQ-TSN-003",
+    "title": "QoS::transport_priority fallback PCP selection",
+    "text": "When a writer's topic has no matching TSN stream configured, dds::rtps::Participant::new_publisher shall, if QoS::transport_priority is greater than 0, use it (clamped to 7) as a fallback SO_PRIORITY value on a dedicated per-PCP socket with no DSCP marking and no scheduled transmit, matching the resolution otherwise falling back to the participant's shared data socket. QoS::latency_budget shall remain purely informational (read by no send-path logic), matching go-DDS.",
+    "category": "functional",
+    "criticality": "low",
+    "standards": [
+      "go-DDS rtps/participant.go NewPublisher \"Wire TSN stream\" fallback branch"
+    ]
+  },
+  {
+    "id": "REQ-TSN-004",
+    "title": "SO_TXTIME-scheduled transmit for TSN streams with a nonzero tx_offset",
+    "text": "For a writer resolved against a TSN stream whose tx_offset is nonzero, Writer::write() shall compute a scheduled transmit time (nanoseconds since the CLOCK_TAI epoch) as the next stream-interval boundary plus tx_offset, and send each remote DATA/DATA_FRAG message via dds::rtps::scheduled_send on the writer's dedicated TSN socket, falling back to an immediate send when CLOCK_TAI is unavailable, the socket has no dedicated TSN socket, or the stream's interval is zero.",
+    "category": "functional",
+    "criticality": "low",
+    "standards": [
+      "go-DDS rtps/participant.go Write() txTimeNS computation",
+      "IEEE 802.1Qbv / SO_TXTIME (Linux \u2265 4.19)"
+    ]
+  },
+  {
+    "id": "REQ-TSN-005",
+    "title": "TSN stream MaxFragPayload bounds writer fragmentation",
+    "text": "Stream::max_frag_payload() shall return max_frame_size minus 48 (or 0 when max_frame_size is unset or \u2264 48). A writer resolved against a TSN stream with a nonzero max_frag_payload shall use it, instead of fragment.hpp's default kMaxFragmentPayload, as the DATA/DATA_FRAG fragmentation threshold for every write.",
+    "category": "functional",
+    "criticality": "low",
+    "standards": [
+      "go-DDS tsn/tsn.go Stream.MaxFragPayload, rtps/participant.go rtpsWriter.fragmentSize"
+    ]
+  },
+  {
+    "id": "REQ-TSN-006",
+    "title": "TAPRIOConfig gate control list, validation, and derivation",
+    "text": "The system shall define dds::tsn::TAPRIOEntry (gate_mask, interval) and TAPRIOConfig (cycle_time, entries, interface, base_time, offload) with cycle_duration() (explicit cycle_time or the sum of entry intervals), validate() (non-empty interface, non-empty entries, every entry interval > 0 and \u2264 the kernel's uint32 nanosecond limit), tc_command() (a portable tc(8) command-string template), and taprio_from_streams() (deriving a TAPRIOConfig from a StreamConfig, one gate entry per stream keyed by PCP as the traffic class), all available and platform-independent on every target.",
+    "category": "functional",
+    "criticality": "low",
+    "standards": [
+      "go-DDS tsn/taprio.go, tsn/diagnostics.go TAPRIOConfig/TAPRIOFromStreams",
+      "IEEE 802.1Qbv"
+    ]
+  },
+  {
+    "id": "REQ-TSN-007",
+    "title": "TAPRIOConfig::apply/verify_applied \u2014 Linux netlink, portable stub elsewhere",
+    "text": "On Linux, TAPRIOConfig::apply() shall program the kernel taprio qdisc on Interface via an RTM_NEWQDISC request over NETLINK_ROUTE (replacing any existing root qdisc) and TAPRIOConfig::verify_applied() shall confirm it via RTM_GETQDISC, both requiring CAP_NET_ADMIN; on every other platform, both shall return a \"TAPRIO qdisc requires Linux\" diagnostic without attempting any OS call. The platform split shall be a CMAKE_SYSTEM_NAME-gated translation-unit split (taprio_linux.cpp / taprio_other.cpp), matching this repo's traffic_linux.cpp/traffic_other.cpp precedent.",
+    "category": "functional",
+    "criticality": "low",
+    "standards": [
+      "go-DDS tsn/taprio_linux.go, tsn/taprio_stub.go",
+      "Linux RTM_NEWQDISC/RTM_GETQDISC over NETLINK_ROUTE"
+    ]
   }
 ]
