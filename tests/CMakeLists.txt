@@ -21,6 +21,7 @@ add_executable(cppdds_tests
     test_security_access.cpp
     test_security_replay.cpp
     test_xtypes.cpp
+    test_cdr.cpp
 )
 
 target_link_libraries(cppdds_tests

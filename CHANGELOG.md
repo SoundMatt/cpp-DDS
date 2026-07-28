@@ -6,6 +6,47 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.20.0] — 2026-07-27
+
+### Added
+
+- `dds::cdr` (`include/dds/cdr/cdr.hpp`, `src/cdr/cdr.cpp`) — general-purpose
+  CDR/XCDR1 encode/decode per OMG DDS-XTypes 1.3, a faithful C++ port of
+  go-DDS's top-level `tools/cdr` package, the second item of `ROADMAP.md`'s
+  "Tier 3 — xtypes, tsn, idl, cdr". `Encoder`/`Decoder` handle all CDR
+  primitives (bool/int8/uint8/int16/uint16/int32/uint32/int64/uint64/
+  float32/float64) with natural alignment, plus strings (4-byte-aligned
+  uint32 length + UTF-8 bytes + null terminator) and byte sequences
+  (4-byte-aligned uint32 count + raw bytes). `Encoder` prepends and
+  `Decoder::create()` validates the 4-byte CDR_LE encapsulation header
+  (accepting both the CDR_LE and CDR_BE scheme values on decode, matching
+  go-DDS's own accept-both-decode-LE-only quirk exactly). Deliberately a
+  SEPARATE library from Tier 1 phase 2's discovery-scoped
+  `dds::rtps::PLCDREncoder`/`PLCDRDecoder` (`include/dds/rtps/cdr.hpp`),
+  which is not reused or extended — go-DDS keeps these as two independent
+  packages (`rtps/cdr.go` vs. top-level `tools/cdr/`) and cpp-DDS mirrors
+  that split with a new top-level `dds/cdr/`.
+- Every `Encoder`/`Decoder` method verified byte-exact against reference
+  vectors independently derived from a fresh go-DDS clone (calling go-DDS's
+  actual exported `Encoder`/`Decoder` methods directly from a scratch
+  `_test.go` file, never committed upstream).
+- 45 new tests (`tests/test_cdr.cpp`) — byte-exact reference-vector tests
+  plus full behavioral parity with go-DDS's own `cdr_test.go` matrix
+  (primitive/string/bytes round trips, alignment, multi-field struct
+  simulation, encapsulation header acceptance/rejection, `Len`/`Remaining`
+  introspection, buffer-underrun detection on every typed read) — 443/443
+  tests total. Adds `REQ-CDR-001` through `REQ-CDR-005`, traced and tested.
+
+Verified locally: Release C++17 build clean, the new `src/cdr/cdr.cpp` and
+`tests/test_cdr.cpp` additionally compiled warning-clean under a genuine
+`-std=c++20` invocation directly (this repo's CMakeLists.txt hard-sets
+`CMAKE_CXX_STANDARD 17`, so a real standalone `-std=c++20` compiler
+invocation is how the C++20 leg is actually exercised locally, per phase 6's
+established precedent), ctest 443/443, Debug ASan+UBSan pass on
+macOS/AppleClang. ROADMAP.md checked off.
+
+---
+
 ## [0.19.0] — 2026-07-27
 
 ### Added
