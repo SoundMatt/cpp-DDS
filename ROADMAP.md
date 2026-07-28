@@ -381,9 +381,65 @@ buildable and testable against go-DDS's file of the same concern):
    mock-participant-backed `ILoaningPublisher` implementation remains out of scope
    here (see the still-unchecked ddscore item immediately below, which this phase
    only partially advances).
-10. **IPv6 / wildcard locators** (best-effort, non-gating) — go-DDS's own docs flag IPv6
+10. [x] **IPv6 / wildcard locators** (best-effort, non-gating) — go-DDS's own docs flag IPv6
     transport as having "limited interop testing"; treat cpp-DDS's IPv6 support the same
-    way — implement it, don't gate a release on it.
+    way — implement it, don't gate a release on it. **Done (v0.13.0):** wildcard
+    (0.0.0.0-address) locator fill-in was already implemented and tested as of phases
+    4-5 (SpdpService/SedpService fill a received all-zero-address Locator's trailing 4
+    bytes with the sender's real IPv4 address — see spdp.hpp/sedp.hpp's own scope notes),
+    and Locator_t (types.hpp) has encoded/decoded UDPv6-kind values byte-identically to
+    go-DDS since phase 1/2 (the 24-byte kind+port+address layout is kind-agnostic; see
+    "Locator::encode matches go-DDS UDPv6 reference vector" in tests/test_rtps_types.cpp)
+    — so this phase's actual new work is entirely at the socket/transport-primitive and
+    participant-integration layers. `dds::rtps::UdpSocket` (transport.hpp/transport.cpp)
+    gained `bind_unicast_v6`/`bind_multicast_receive_v6`, C++ ports of go-DDS's
+    `newUnicastSocketV6`/`newMulticastReceiveSocketV6` (binds `[::]:port` with
+    `IPV6_V6ONLY` set, matching Go's IPv6-only `"udp6"` network semantics exactly); a new
+    `AddressFamily` tag records which family a given socket is bound to; `send_to`
+    auto-detects the destination family from the address string itself, and `recv`
+    reports the sender's address in the socket's own bound family (an IPv6 sender address
+    is reported as uncompressed colon-hex — valid `inet_pton` input, not necessarily RFC
+    5952 canonical form). `dds::rtps::Participant` gained `ParticipantOptions::ipv6`, a
+    C++ port of go-DDS's `WithIPv6()` option — deliberately matching its exact (shallow)
+    integration depth rather than an idealized dual-stack rewrite: when set, three
+    additional IPv6 sockets are bound at the same RTPS §9.6.1 port numbers the IPv4
+    sockets use (a UDP port is scoped per address family, so this isn't a collision),
+    every bind failure is soft (participant creation still succeeds IPv4-only, matching
+    go-DDS's own "Optional IPv6 sockets. Failures are soft" comment verbatim), and only
+    the user-data socket is wired into a receive path (`data_loop_v6`, feeding the exact
+    same `handle_data_packet` as the IPv4 path) — the SPDP-multicast and SEDP-meta IPv6
+    sockets are bound-but-unconsumed, exactly matching go-DDS's own `mcastSockV6`/
+    `metaSockV6` (bound in `newParticipant`, closed in `Close`, never read from anywhere
+    else). Outbound replies/retransmits always go via the IPv4 socket regardless of which
+    socket a packet arrived on, matching go-DDS's `participant.go` verbatim (every one of
+    `handleDataPacket`/`handleAckNack`/`handleHeartbeat`'s sends unconditionally calls
+    `p.dataSock.send(...)`, never `p.dataSockV6`) — this is a faithful port of a real,
+    documented limitation, not an oversight; go-DDS's own IPv6 tests (`rtps_test.go`'s
+    `TestRTPS_WithIPv6_StartsCleanly`, `rtps_coverage_test.go`'s
+    `TestRTPS_WithIPv6_creates_participant`) likewise only assert that `WithIPv6()`
+    doesn't prevent participant creation and that ordinary same-process pub/sub keeps
+    working — this port's own tests mirror both, plus (going one step further than
+    go-DDS's own coverage) a real end-to-end test that injects a wire-correct DATA
+    submessage from a raw `::1` UdpSocket directly into a Participant's IPv6 data port
+    and confirms it reaches a subscriber via `data_loop_v6`. SPDP/SEDP discovery and
+    Locator advertisement remain IPv4-only on both sides, matching go-DDS's own
+    `buildParticipantData`, which never advertises a UDPv6-kind Locator either — a peer
+    has no way to learn this participant's IPv6 address regardless, so inventing
+    IPv6-kind proxy advertisement here would just be untested, unreachable code (SEDP's
+    `locator_to_dest` was, however, extended to *format* a UDPv6-kind Locator's address
+    correctly for the send path, for symmetry with Locator's own generality and in case
+    a genuinely wire-conformant peer ever supplies one — even though nothing in go-DDS
+    exercises that branch today). 8 new tests (5 transport-level: ephemeral IPv6 bind,
+    loopback IPv6 send/recv round-trip, cross-family send rejection, IPv6 multicast
+    receive with unicast fallback, the `ff03::1` group constant; 3 participant-level: the
+    two go-DDS-mirrored option-coverage tests plus the raw-socket wire-injection test) —
+    287/287 tests, verified locally with Release C++17/C++20 builds (plus the changed and
+    new files additionally compiled warning-clean under a genuine `-std=c++20`
+    invocation directly, per phase 6's precedent for this repo's C++20 CI-leg quirk) and
+    a Debug ASan/UBSan pass; CI additionally exercises Linux/gcc-12 ASan+UBSan. Scope:
+    internal, additive — `ParticipantOptions::ipv6` is opt-in and off by default, and (as
+    with every prior RTPS phase) none of this is wired into `dds::adapt()` or any
+    automatic-transport-selection surface.
 
 Suggested version sequencing (land discovery and best-effort delivery before reliable
 delivery, since reliable QoS depends on phase 6's scaffolding):
@@ -397,10 +453,11 @@ delivery, since reliable QoS depends on phase 6's scaffolding):
 (Actual tags diverged from this original `v0.2.x` suggestion once phase 1 landed —
 each phase shipped as its own incrementing `v0.MINOR.0` release instead:
 v0.3.0=phase 1, v0.4.0=phase 2, v0.5.0=phase 3, v0.6.0=phase 4, v0.7.0=phase 5,
-v0.8.0=phase 6, v0.9.0=phase 7, v0.10.0=phase 8, v0.12.0=phase 9 — see each phase's
-own "Done (vX.Y.0)" note above. v0.11.0 landed RTPS wire-level interop testing
-infrastructure, a cross-cutting need rather than a numbered roadmap phase — see
-that release's own CHANGELOG.md entry.)
+v0.8.0=phase 6, v0.9.0=phase 7, v0.10.0=phase 8, v0.12.0=phase 9, v0.13.0=phase 10 —
+see each phase's own "Done (vX.Y.0)" note above. v0.11.0 landed RTPS wire-level interop
+testing infrastructure, a cross-cutting need rather than a numbered roadmap phase — see
+that release's own CHANGELOG.md entry. Tier 1's ten dependency-ordered RTPS sub-phases
+are now all complete.)
 
 Also within `ddscore` but not RTPS-specific, carried forward from the previous roadmap
 draft and small enough to slot in opportunistically alongside Tier 1 rather than blocking

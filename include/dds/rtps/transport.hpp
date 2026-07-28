@@ -27,11 +27,29 @@
 //
 // Scope notes (deliberate deviations from a literal line-for-line port):
 //
-//   - IPv4 only. go-DDS's transport.go additionally has IPv6 socket
-//     constructors (newUnicastSocketV6, newMulticastReceiveSocketV6); the
-//     roadmap explicitly defers "IPv6 / wildcard locators" to a later,
-//     best-effort, non-gating phase (Tier 1 phase 10), so this port omits
-//     the V6 path rather than half-implementing it here.
+//   - IPv4 is the default; IPv6 is opt-in via bind_unicast_v6() /
+//     bind_multicast_receive_v6() (Tier 1 phase 10, "IPv6 / wildcard
+//     locators" — best-effort, non-gating, mirroring go-DDS's own
+//     newUnicastSocketV6 / newMulticastReceiveSocketV6). A single UdpSocket
+//     is bound to exactly one address family for its lifetime, exactly
+//     like go-DDS's udpSocket (a "udp4" or "udp6" net.UDPConn, never both).
+//     send_to() auto-detects the destination's family from the address
+//     string itself (a literal containing ':' is IPv6); recv() reports
+//     addresses in the family the socket itself was bound as. Locator_t
+//     (types.hpp) already encodes/decodes UDPv4 *and* UDPv6 kinds
+//     byte-identically to go-DDS (verified since phase 1/2 — the 24-byte
+//     layout is kind-agnostic), so no wire-format change was needed here;
+//     this phase is purely about the socket/transport primitive go-DDS's
+//     rtps.participant layers on top of it. Following go-DDS's own
+//     (documented "limited interop testing") design exactly: the
+//     participant-level IPv6 socket this enables (rtps/participant.hpp's
+//     ParticipantOptions::ipv6) is wired into the *receive* path only —
+//     replies/retransmits still always go out the IPv4 socket, matching
+//     go-DDS's participant.go (every send in handleDataPacket/handleAckNack/
+//     handleHeartbeat unconditionally uses p.dataSock, the IPv4 socket,
+//     even for a `from` that arrived via dataSockV6). This is a faithful
+//     port of that real, documented gap — not an idealized fix for it; see
+//     ROADMAP.md phase 10's "Done" note for detail.
 //   - This primitive is a *synchronous* send/recv socket wrapper, not an
 //     async goroutine-plus-channel read loop. go-DDS's udpSocket runs a
 //     background goroutine (readLoop) that pushes into a buffered Go
@@ -104,6 +122,14 @@ constexpr int user_multicast_port(int domain) noexcept {
 // Standard RTPS 2.3 discovery (SPDP) multicast group.
 inline constexpr const char* kSpdpMulticastAddr = "239.255.0.1";
 
+// RTPS IPv6 discovery multicast group (site-local), matching go-DDS's
+// spdpMulticastAddrV6 (rtps/locator.go). Not currently joined by
+// SpdpService (SPDP/SEDP remain IPv4-only — see transport.hpp's file-level
+// scope note); provided here for symmetry and for any future phase that
+// extends discovery itself to IPv6, exactly mirroring go-DDS's own
+// currently-unused-by-spdpService constant of the same name.
+inline constexpr const char* kSpdpMulticastAddrV6 = "ff03::1";
+
 // go-DDS's user-data multicast group (domain-scoped fast path; not part of
 // the OMG spec's mandated addresses but shared here for parity since
 // user_multicast_port exists to serve it).
@@ -121,13 +147,23 @@ using NativeSocketHandle = int; // POSIX file descriptor
 // go-DDS's udpPacket{data, from}.
 struct UdpPacket {
     std::vector<uint8_t> data;
-    std::string          from_address; // dotted-quad IPv4
-    int                  from_port{0};
+    // Dotted-quad IPv4 (e.g. "127.0.0.1") when received on an IPv4 socket;
+    // colon-separated IPv6 (e.g. "fe80:0:0:0:0:0:0:1", uncompressed —
+    // valid inet_pton input, not necessarily RFC 5952 canonical form) when
+    // received on an IPv6 socket (see UdpSocket::bind_unicast_v6 /
+    // bind_multicast_receive_v6).
+    std::string           from_address;
+    int                   from_port{0};
 };
 
-// UdpSocket wraps a bound, IPv4 UDP socket. Move-only (owns a native OS
-// handle). Corresponds to go-DDS's udpSocket, minus the background
-// readLoop goroutine — see the file-level scope note above.
+// AddressFamily selects IPv4 or IPv6 for a UdpSocket. A socket is bound to
+// exactly one family for its lifetime — matching go-DDS's udpSocket, which
+// always wraps a "udp4" or "udp6" net.UDPConn, never both.
+enum class AddressFamily { kIPv4, kIPv6 };
+
+// UdpSocket wraps a bound UDP socket (IPv4 or IPv6). Move-only (owns a
+// native OS handle). Corresponds to go-DDS's udpSocket, minus the
+// background readLoop goroutine — see the file-level scope note above.
 class UdpSocket {
 public:
     UdpSocket() = default;
@@ -151,12 +187,34 @@ public:
     // discovery is disabled in that case.
     static std::optional<UdpSocket> bind_multicast_receive(const std::string& group, int port);
 
+    // Binds [::]:<port> (IPv6, dual-stack disabled via IPV6_V6ONLY to
+    // match Go's "udp6" network semantics exactly). Same port+0…+15 retry
+    // as bind_unicast. Matches go-DDS's newUnicastSocketV6. Returns
+    // std::nullopt if the OS/sandbox has no IPv6 stack — callers are
+    // expected to treat that as a soft failure (see
+    // rtps/participant.hpp's ParticipantOptions::ipv6), exactly as go-DDS's
+    // "Optional IPv6 sockets. Failures are soft" comment in newParticipant.
+    static std::optional<UdpSocket> bind_unicast_v6(int port);
+
+    // IPv6 analogue of bind_multicast_receive: joins the given IPv6
+    // multicast group (e.g. kSpdpMulticastAddrV6) on port, falling back to
+    // a plain IPv6 unicast bind on the same port if no IPv6 multicast-
+    // capable interface is available. Matches go-DDS's
+    // newMulticastReceiveSocketV6.
+    static std::optional<UdpSocket> bind_multicast_receive_v6(const std::string& group, int port);
+
     bool valid() const noexcept { return handle_ != kInvalidHandle; }
     int  port() const noexcept { return port_; }
+    AddressFamily family() const noexcept { return family_; }
     NativeSocketHandle native_handle() const noexcept { return handle_; }
 
-    // Sends data to dst_address:dst_port (dst_address is a dotted-quad
-    // IPv4 literal). Returns false on error.
+    // Sends data to dst_address:dst_port. dst_address is a dotted-quad
+    // IPv4 literal or a colon-separated IPv6 literal (auto-detected); the
+    // OS rejects the send if the address family doesn't match the socket's
+    // own bound family (e.g. sending an IPv6 destination on an IPv4-only
+    // socket), which this simply surfaces as a `false` return, matching
+    // go-DDS's identical constraint (a "udp4" net.UDPConn cannot
+    // WriteToUDP an IPv6 net.UDPAddr either). Returns false on error.
     bool send_to(const std::string& dst_address, int dst_port,
                  const uint8_t* data, std::size_t len) const;
 
@@ -175,6 +233,7 @@ private:
 
     NativeSocketHandle handle_{kInvalidHandle};
     int                 port_{0};
+    AddressFamily       family_{AddressFamily::kIPv4};
 };
 
 } // namespace dds::rtps

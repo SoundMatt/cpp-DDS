@@ -217,3 +217,106 @@ TEST_CASE("UdpSocket::send_to on an invalid/closed socket fails cleanly", "[rtps
     CHECK_FALSE(sock->send_to("127.0.0.1", 7400, payload.data(), payload.size()));
     CHECK_FALSE(sock->recv().has_value());
 }
+
+// ── IPv6 (Tier-1 phase 10 — "IPv6 / wildcard locators", best-effort,
+//    non-gating) ─────────────────────────────────────────────────────────────
+//
+// go-DDS's own IPv6 support is documented as having "limited interop
+// testing" (rtps.go), and its own transport.go has no dedicated
+// transport_test.go of its own for newUnicastSocketV6/
+// newMulticastReceiveSocketV6 either — like the IPv4 UdpSocket tests
+// above, these are ordinary behavioral tests against real OS sockets, not
+// wire-format conformance vectors (there is no new wire format here:
+// Locator_t already encodes/decodes UDPv6-kind values byte-identically to
+// go-DDS — see "Locator::encode matches go-DDS UDPv6 reference vector" in
+// test_rtps_types.cpp, verified since Tier-1 phase 1/2).
+//
+// Every test below tolerates a sandboxed/CI environment with no IPv6 stack
+// at all: bind_unicast_v6/bind_multicast_receive_v6 returning std::nullopt
+// in that case is treated as "environment has no IPv6" and the test is
+// skipped rather than failed, mirroring how bind_multicast_receive's own
+// multicast-unavailable fallback is a *documented*, not exceptional, path.
+
+TEST_CASE("UdpSocket::bind_unicast_v6 with port 0 gets an OS-assigned ephemeral port",
+          "[rtps][transport][ipv6]") {
+    auto sock = UdpSocket::bind_unicast_v6(0);
+    if (!sock.has_value()) {
+        WARN("no IPv6 stack available in this environment — skipping");
+        return;
+    }
+    CHECK(sock->valid());
+    CHECK(sock->port() != 0);
+    CHECK(sock->family() == AddressFamily::kIPv6);
+}
+
+TEST_CASE("UdpSocket IPv6 send/recv round-trip over loopback (::1)", "[rtps][transport][ipv6]") {
+    auto server = UdpSocket::bind_unicast_v6(0);
+    auto client = UdpSocket::bind_unicast_v6(0);
+    if (!server.has_value() || !client.has_value()) {
+        WARN("no IPv6 stack available in this environment — skipping");
+        return;
+    }
+
+    const std::vector<uint8_t> payload{0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01};
+    REQUIRE(client->send_to("::1", server->port(), payload.data(), payload.size()));
+
+    std::optional<UdpPacket> received;
+    for (int attempt = 0; attempt < 8 && !received.has_value(); ++attempt) {
+        received = server->recv();
+    }
+
+    REQUIRE(received.has_value());
+    CHECK(received->data == payload);
+    CHECK(received->from_port == client->port());
+    // Uncompressed colon-hex form of ::1 (see format_ipv6 in transport.cpp).
+    CHECK(received->from_address == "0:0:0:0:0:0:0:1");
+}
+
+TEST_CASE("An IPv4-only UdpSocket cannot send to an IPv6 destination, and vice versa",
+          "[rtps][transport][ipv6]") {
+    auto v4 = UdpSocket::bind_unicast(0);
+    REQUIRE(v4.has_value());
+    const std::vector<uint8_t> payload{0x01};
+    // A well-formed IPv6 literal is parsed correctly by send_to's
+    // family-detection, but the OS rejects the sendto() itself because the
+    // socket was bound AF_INET — matching go-DDS's identical constraint (a
+    // "udp4" net.UDPConn cannot WriteToUDP an IPv6 net.UDPAddr).
+    CHECK_FALSE(v4->send_to("::1", 12345, payload.data(), payload.size()));
+
+    auto v6 = UdpSocket::bind_unicast_v6(0);
+    if (!v6.has_value()) {
+        WARN("no IPv6 stack available in this environment — skipping the v6-socket half");
+        return;
+    }
+    CHECK_FALSE(v6->send_to("127.0.0.1", 12345, payload.data(), payload.size()));
+}
+
+TEST_CASE("UdpSocket::bind_multicast_receive_v6 succeeds (real join or unicast fallback) "
+          "and still delivers same-host IPv6 unicast traffic on its bound port",
+          "[rtps][transport][ipv6]") {
+    auto mcast_sock = UdpSocket::bind_multicast_receive_v6(kSpdpMulticastAddrV6, 0);
+    if (!mcast_sock.has_value()) {
+        WARN("no IPv6 stack available in this environment — skipping");
+        return;
+    }
+    CHECK(mcast_sock->valid());
+    CHECK(mcast_sock->port() != 0);
+
+    auto sender = UdpSocket::bind_unicast_v6(0);
+    REQUIRE(sender.has_value());
+
+    const std::vector<uint8_t> payload{0x01, 0x02, 0x03};
+    REQUIRE(sender->send_to("::1", mcast_sock->port(), payload.data(), payload.size()));
+
+    std::optional<UdpPacket> received;
+    for (int attempt = 0; attempt < 8 && !received.has_value(); ++attempt) {
+        received = mcast_sock->recv();
+    }
+    REQUIRE(received.has_value());
+    CHECK(received->data == payload);
+}
+
+TEST_CASE("IPv6 multicast group constant matches go-DDS's spdpMulticastAddrV6",
+          "[rtps][transport][ipv6]") {
+    CHECK(std::string(kSpdpMulticastAddrV6) == "ff03::1");
+}

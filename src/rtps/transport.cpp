@@ -99,6 +99,28 @@ NativeSocketHandle make_udp_socket() {
 #endif
 }
 
+// Creates an unbound IPv6 UDP socket with IPV6_V6ONLY set, matching Go's
+// "udp6" network (IPv6-only, no IPv4-mapped-address dual-stack behavior).
+// Returns kInvalidHandle on failure (e.g. no IPv6 stack).
+NativeSocketHandle make_udp_socket_v6() {
+    ensure_winsock_initialized();
+#if defined(_WIN32)
+    SOCKET s = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+    NativeSocketHandle h = static_cast<NativeSocketHandle>(s);
+#else
+    NativeSocketHandle h = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+#endif
+    if (h == static_cast<NativeSocketHandle>(-1)) return h;
+    int one = 1;
+#if defined(_WIN32)
+    ::setsockopt(static_cast<SOCKET>(h), IPPROTO_IPV6, IPV6_V6ONLY,
+                 reinterpret_cast<const char*>(&one), sizeof(one));
+#else
+    ::setsockopt(h, IPPROTO_IPV6, IPV6_V6ONLY, &one, sizeof(one));
+#endif
+    return h;
+}
+
 bool set_reuse_addr(NativeSocketHandle h) {
     int one = 1;
 #if defined(_WIN32)
@@ -143,12 +165,92 @@ bool bind_any(NativeSocketHandle h, int port, int* out_bound_port) {
     return true;
 }
 
+// IPv6 analogue of bind_any: binds [::]:port.
+bool bind_any_v6(NativeSocketHandle h, int port, int* out_bound_port) {
+    struct sockaddr_in6 addr;
+    std::memset(&addr, 0, sizeof(addr));
+    addr.sin6_family = AF_INET6;
+    addr.sin6_addr   = in6addr_any;
+    addr.sin6_port   = htons(static_cast<uint16_t>(port));
+
+#if defined(_WIN32)
+    int rc = ::bind(static_cast<SOCKET>(h), reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
+#else
+    int rc = ::bind(h, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
+#endif
+    if (rc != 0) return false;
+
+    if (port == 0 && out_bound_port != nullptr) {
+        struct sockaddr_in6 actual;
+        socklen_t len = sizeof(actual);
+#if defined(_WIN32)
+        if (::getsockname(static_cast<SOCKET>(h), reinterpret_cast<struct sockaddr*>(&actual), &len) == 0) {
+#else
+        if (::getsockname(h, reinterpret_cast<struct sockaddr*>(&actual), &len) == 0) {
+#endif
+            *out_bound_port = ntohs(actual.sin6_port);
+        }
+    } else if (out_bound_port != nullptr) {
+        *out_bound_port = port;
+    }
+    return true;
+}
+
+// Formats a 16-byte IPv6 address as 8 colon-separated hex groups (not
+// zero-compressed — valid inet_pton input, matching what recv() needs to
+// hand back via UdpPacket::from_address; not intended as a pretty-printer).
+std::string format_ipv6(const uint8_t (&addr)[16]) {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%x:%x:%x:%x:%x:%x:%x:%x",
+                  (addr[0] << 8) | addr[1], (addr[2] << 8) | addr[3],
+                  (addr[4] << 8) | addr[5], (addr[6] << 8) | addr[7],
+                  (addr[8] << 8) | addr[9], (addr[10] << 8) | addr[11],
+                  (addr[12] << 8) | addr[13], (addr[14] << 8) | addr[15]);
+    return buf;
+}
+
+// Address-family-agnostic destination resolution for send_to: tries IPv4
+// first, then IPv6. Returns true and fills in *out_v6 (whether the parsed
+// address is IPv6) plus the family-appropriate sockaddr on success.
+bool resolve_dest(const std::string& dst_address, int dst_port, struct sockaddr_storage* out,
+                   socklen_t* out_len) {
+    struct sockaddr_in v4;
+    std::memset(&v4, 0, sizeof(v4));
+    v4.sin_family = AF_INET;
+    v4.sin_port   = htons(static_cast<uint16_t>(dst_port));
+#if defined(_WIN32)
+    if (InetPtonA(AF_INET, dst_address.c_str(), &v4.sin_addr) == 1) {
+#else
+    if (::inet_pton(AF_INET, dst_address.c_str(), &v4.sin_addr) == 1) {
+#endif
+        std::memcpy(out, &v4, sizeof(v4));
+        *out_len = sizeof(v4);
+        return true;
+    }
+
+    struct sockaddr_in6 v6;
+    std::memset(&v6, 0, sizeof(v6));
+    v6.sin6_family = AF_INET6;
+    v6.sin6_port   = htons(static_cast<uint16_t>(dst_port));
+#if defined(_WIN32)
+    if (InetPtonA(AF_INET6, dst_address.c_str(), &v6.sin6_addr) == 1) {
+#else
+    if (::inet_pton(AF_INET6, dst_address.c_str(), &v6.sin6_addr) == 1) {
+#endif
+        std::memcpy(out, &v6, sizeof(v6));
+        *out_len = sizeof(v6);
+        return true;
+    }
+    return false;
+}
+
 } // namespace
 
 UdpSocket::UdpSocket(UdpSocket&& other) noexcept
-    : handle_(other.handle_), port_(other.port_) {
+    : handle_(other.handle_), port_(other.port_), family_(other.family_) {
     other.handle_ = kInvalidHandle;
     other.port_   = 0;
+    other.family_ = AddressFamily::kIPv4;
 }
 
 UdpSocket& UdpSocket::operator=(UdpSocket&& other) noexcept {
@@ -156,8 +258,10 @@ UdpSocket& UdpSocket::operator=(UdpSocket&& other) noexcept {
         close();
         handle_       = other.handle_;
         port_         = other.port_;
+        family_       = other.family_;
         other.handle_ = kInvalidHandle;
         other.port_   = 0;
+        other.family_ = AddressFamily::kIPv4;
     }
     return *this;
 }
@@ -169,7 +273,8 @@ void UdpSocket::close() {
         close_native(handle_);
         handle_ = kInvalidHandle;
     }
-    port_ = 0;
+    port_   = 0;
+    family_ = AddressFamily::kIPv4;
 }
 
 std::optional<UdpSocket> UdpSocket::bind_unicast(int port) {
@@ -260,25 +365,109 @@ std::optional<UdpSocket> UdpSocket::bind_multicast_receive(const std::string& gr
     return sock;
 }
 
+std::optional<UdpSocket> UdpSocket::bind_unicast_v6(int port) {
+    if (port == 0) {
+        NativeSocketHandle h = make_udp_socket_v6();
+        if (h == kInvalidHandle) return std::nullopt;
+        set_reuse_addr(h);
+        int bound_port = 0;
+        if (!bind_any_v6(h, 0, &bound_port)) {
+            close_native(h);
+            return std::nullopt;
+        }
+        set_recv_timeout(h, kRecvTimeoutMs);
+        UdpSocket sock;
+        sock.handle_ = h;
+        sock.port_   = bound_port;
+        sock.family_ = AddressFamily::kIPv6;
+        return sock;
+    }
+
+    // Matches go-DDS's newUnicastSocketV6: try port, port+1, … port+15.
+    for (int i = 0; i < 16; ++i) {
+        NativeSocketHandle h = make_udp_socket_v6();
+        if (h == kInvalidHandle) continue;
+        set_reuse_addr(h);
+        int candidate    = port + i;
+        int bound_port   = candidate;
+        if (bind_any_v6(h, candidate, &bound_port)) {
+            set_recv_timeout(h, kRecvTimeoutMs);
+            UdpSocket sock;
+            sock.handle_ = h;
+            sock.port_   = bound_port;
+            sock.family_ = AddressFamily::kIPv6;
+            return sock;
+        }
+        close_native(h);
+    }
+    return std::nullopt;
+}
+
+std::optional<UdpSocket> UdpSocket::bind_multicast_receive_v6(const std::string& group, int port) {
+    NativeSocketHandle h = make_udp_socket_v6();
+    if (h == kInvalidHandle) return std::nullopt;
+    set_reuse_addr(h);
+
+    int bound_port = port;
+    if (bind_any_v6(h, port, &bound_port)) {
+        struct ipv6_mreq mreq;
+        std::memset(&mreq, 0, sizeof(mreq));
+#if defined(_WIN32)
+        InetPtonA(AF_INET6, group.c_str(), &mreq.ipv6mr_multiaddr);
+#else
+        ::inet_pton(AF_INET6, group.c_str(), &mreq.ipv6mr_multiaddr);
+#endif
+        mreq.ipv6mr_interface = 0; // let the OS pick the default interface
+
+#if defined(_WIN32)
+        int rc = ::setsockopt(static_cast<SOCKET>(h), IPPROTO_IPV6, IPV6_JOIN_GROUP,
+                               reinterpret_cast<const char*>(&mreq), sizeof(mreq));
+#else
+        int rc = ::setsockopt(h, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq));
+#endif
+        if (rc == 0) {
+            set_recv_timeout(h, kRecvTimeoutMs);
+            UdpSocket sock;
+            sock.handle_ = h;
+            sock.port_   = bound_port;
+            sock.family_ = AddressFamily::kIPv6;
+            return sock;
+        }
+    }
+
+    // IPv6 multicast unavailable — fall back to a plain IPv6 unicast bind
+    // on the same port, matching bind_multicast_receive's IPv4 fallback
+    // (and go-DDS's newMulticastReceiveSocketV6).
+    close_native(h);
+    NativeSocketHandle h2 = make_udp_socket_v6();
+    if (h2 == kInvalidHandle) return std::nullopt;
+    set_reuse_addr(h2);
+    int fallback_port = port;
+    if (!bind_any_v6(h2, port, &fallback_port)) {
+        close_native(h2);
+        return std::nullopt;
+    }
+    set_recv_timeout(h2, kRecvTimeoutMs);
+    UdpSocket sock;
+    sock.handle_ = h2;
+    sock.port_   = fallback_port;
+    sock.family_ = AddressFamily::kIPv6;
+    return sock;
+}
+
 bool UdpSocket::send_to(const std::string& dst_address, int dst_port,
                          const uint8_t* data, std::size_t len) const {
     if (!valid()) return false;
 
-    struct sockaddr_in addr;
-    std::memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port   = htons(static_cast<uint16_t>(dst_port));
-#if defined(_WIN32)
-    if (InetPtonA(AF_INET, dst_address.c_str(), &addr.sin_addr) != 1) return false;
-#else
-    if (::inet_pton(AF_INET, dst_address.c_str(), &addr.sin_addr) != 1) return false;
-#endif
+    struct sockaddr_storage addr;
+    socklen_t                addr_len = 0;
+    if (!resolve_dest(dst_address, dst_port, &addr, &addr_len)) return false;
 
 #if defined(_WIN32)
     int n = ::sendto(static_cast<SOCKET>(handle_), reinterpret_cast<const char*>(data),
-                      static_cast<int>(len), 0, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
+                      static_cast<int>(len), 0, reinterpret_cast<struct sockaddr*>(&addr), addr_len);
 #else
-    ssize_t n = ::sendto(handle_, data, len, 0, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
+    ssize_t n = ::sendto(handle_, data, len, 0, reinterpret_cast<struct sockaddr*>(&addr), addr_len);
 #endif
     return n == static_cast<decltype(n)>(len);
 }
@@ -287,7 +476,7 @@ std::optional<UdpPacket> UdpSocket::recv() const {
     if (!valid()) return std::nullopt;
 
     std::vector<uint8_t> buf(kMaxUdpSize);
-    struct sockaddr_in from;
+    struct sockaddr_storage from;
     std::memset(&from, 0, sizeof(from));
     socklen_t from_len = sizeof(from);
 
@@ -305,14 +494,24 @@ std::optional<UdpPacket> UdpSocket::recv() const {
 
     UdpPacket pkt;
     pkt.data.assign(buf.begin(), buf.begin() + n);
-    char addr_str[INET_ADDRSTRLEN] = {0};
+
+    if (family_ == AddressFamily::kIPv6) {
+        auto* from6 = reinterpret_cast<struct sockaddr_in6*>(&from);
+        uint8_t raw[16];
+        std::memcpy(raw, &from6->sin6_addr, 16);
+        pkt.from_address = format_ipv6(raw);
+        pkt.from_port    = ntohs(from6->sin6_port);
+    } else {
+        auto* from4 = reinterpret_cast<struct sockaddr_in*>(&from);
+        char addr_str[INET_ADDRSTRLEN] = {0};
 #if defined(_WIN32)
-    InetNtopA(AF_INET, &from.sin_addr, addr_str, sizeof(addr_str));
+        InetNtopA(AF_INET, &from4->sin_addr, addr_str, sizeof(addr_str));
 #else
-    ::inet_ntop(AF_INET, &from.sin_addr, addr_str, sizeof(addr_str));
+        ::inet_ntop(AF_INET, &from4->sin_addr, addr_str, sizeof(addr_str));
 #endif
-    pkt.from_address = addr_str;
-    pkt.from_port    = ntohs(from.sin_port);
+        pkt.from_address = addr_str;
+        pkt.from_port    = ntohs(from4->sin_port);
+    }
     return pkt;
 }
 

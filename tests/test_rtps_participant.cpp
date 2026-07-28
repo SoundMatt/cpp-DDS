@@ -429,3 +429,122 @@ TEST_CASE("Two Participants exchange a best-effort sample over real UDP once SED
     pa->close();
     pb->close();
 }
+
+// ── IPv6 (Tier-1 phase 10 — "IPv6 / wildcard locators", best-effort,
+//    non-gating) ─────────────────────────────────────────────────────────────
+//
+// Mirrors go-DDS's own IPv6 test coverage (rtps_test.go's
+// TestRTPS_WithIPv6_StartsCleanly, rtps_coverage_test.go's
+// TestRTPS_WithIPv6_creates_participant): every IPv6 test here skips
+// (rather than fails) if the environment has no usable IPv6 stack, since
+// go-DDS's own newParticipant treats IPv6 bind failure as soft and its own
+// tests t.Skip() on exactly that condition. See participant.hpp's
+// file-level scope note for what ParticipantOptions::ipv6 does and
+// doesn't wire up.
+
+TEST_CASE("ParticipantOptions::ipv6 defaults to false and leaves ipv6_enabled() false",
+          "[rtps][participant][ipv6]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+    CHECK_FALSE(p->ipv6_enabled());
+    CHECK(p->data_unicast_port_v6() == 0);
+    p->close();
+}
+
+TEST_CASE("Participant::create with ipv6=true starts cleanly and same-process pub/sub still works",
+          "[rtps][participant][ipv6]") {
+    // Matches go-DDS's TestRTPS_WithIPv6_StartsCleanly: WithIPv6() must
+    // never prevent participant creation, and ordinary (same-process, IPv4
+    // discovery) pub/sub must keep working exactly as without it.
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    opts.ipv6       = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+    REQUIRE(p);
+
+    if (!p->ipv6_enabled()) {
+        WARN("no IPv6 stack available in this environment — IPv6 socket bind was soft-skipped, "
+             "as designed; continuing with the IPv4-only assertions below");
+    }
+
+    auto [sub, sub_ec] = p->new_subscriber("ipv6/test", default_qos());
+    REQUIRE_FALSE(sub_ec);
+    auto [pub, pub_ec] = p->new_publisher("ipv6/test", default_qos());
+    REQUIRE_FALSE(pub_ec);
+
+    std::vector<uint8_t> payload{'i', 'p', 'v', '6', '-', 'o', 'k'};
+    CHECK_FALSE(pub->write(payload));
+
+    auto ch     = sub->channel();
+    auto sample = ch->recv_until(std::chrono::steady_clock::now() + 3s);
+    REQUIRE(sample.has_value());
+    CHECK(sample->payload == payload);
+
+    p->close();
+}
+
+TEST_CASE("A DATA submessage sent directly to a Participant's IPv6 data socket is received "
+          "and dispatched (real ::1 loopback)",
+          "[rtps][participant][ipv6]") {
+    // Goes one step further than go-DDS's own IPv6 tests (which only cover
+    // same-process delivery — see the file-level scope note): proves
+    // data_loop_v6's wiring into the exact same handle_data_packet as the
+    // IPv4 path actually works over a real IPv6 socket, by injecting a
+    // wire-correct DATA submessage from a raw ::1 UdpSocket, following the
+    // same "fake remote writer, raw injected DATA" pattern
+    // test_rtps_reliable.cpp's announce_fake_remote_writer/send_fake_data
+    // helpers use for the IPv4 path.
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    opts.ipv6       = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+    REQUIRE(p);
+
+    if (!p->ipv6_enabled()) {
+        WARN("no IPv6 stack available in this environment — skipping");
+        p->close();
+        return;
+    }
+
+    auto [sub, sub_ec] = p->new_subscriber("Ipv6WireTopic", default_qos());
+    REQUIRE_FALSE(sub_ec);
+
+    // A fake remote writer, SEDP-matched to the local reader via the same
+    // direct-SedpService::handle_packet injection every other cross-peer
+    // test in this file/test_rtps_reliable.cpp/test_rtps_fragment.cpp uses
+    // in place of waiting for real SPDP convergence.
+    const GuidPrefix fake_writer_prefix{{0xF6, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}};
+    const EntityId    fake_writer_eid = entity_id_for_writer(1);
+    auto data = build_endpoint_data(EndpointInfo{GUID{fake_writer_prefix, fake_writer_eid},
+                                                    "Ipv6WireTopic", true},
+                                     0 /* writer_data_port unused by the reader-acceptance path */);
+    auto announcement = build_sedp_announcement(fake_writer_prefix, kVendorIdCppDDS, kEntityIdSEDPPubWriter,
+                                                 kEntityIdSEDPPubReader, SequenceNumber{0, 1}, data);
+    p->sedp().handle_packet(announcement, "127.0.0.1");
+
+    std::vector<uint8_t> payload{0xC0, 0xFF, 0xEE, 0x06};
+    DataSubmessage ds;
+    ds.reader_entity_id = kEntityIdUnknown;
+    ds.writer_entity_id = fake_writer_eid;
+    ds.seq_num            = u64_to_sn(1);
+    ds.payload             = cdr_wrap_payload(payload);
+    std::vector<uint8_t> submsg;
+    ds.encode(submsg);
+    auto msg = wrap_in_rtps_message(fake_writer_prefix, kVendorIdCppDDS, submsg);
+
+    auto raw_sender = UdpSocket::bind_unicast_v6(0);
+    REQUIRE(raw_sender.has_value());
+    REQUIRE(raw_sender->send_to("::1", p->data_unicast_port_v6(), msg.data(), msg.size()));
+
+    auto ch     = sub->channel();
+    auto sample = ch->recv_until(std::chrono::steady_clock::now() + 3s);
+    REQUIRE(sample.has_value());
+    CHECK(sample->topic == "Ipv6WireTopic");
+    CHECK(sample->payload == payload);
+
+    p->close();
+}
