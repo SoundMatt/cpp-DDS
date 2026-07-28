@@ -27,6 +27,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <thread>
@@ -426,8 +427,201 @@ TEST_CASE("Two Participants exchange a best-effort sample over real UDP once SED
     }
     CHECK(sample->writer_guid == expected_writer_guid);
 
+    // Metrics (fusa:req REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-004
+    // REQ-METRICS-005): the write above is known traffic — pb wrote once,
+    // remote-delivered once, and its SedpService recorded at least one
+    // endpoint match to reach this point at all.
+    auto pb_metrics = pb->metrics();
+    CHECK(pb_metrics.write_count == 1);
+    CHECK(pb_metrics.bytes_written == payload.size());
+
+    auto pb_topic = pb->topic_metrics();
+    auto it = std::find_if(pb_topic.begin(), pb_topic.end(),
+                            [](const relay::TopicMetrics& t) { return t.topic == "E2ETopic"; });
+    REQUIRE(it != pb_topic.end());
+    CHECK(it->write_count == 1);
+    CHECK(it->bytes_written == payload.size());
+
+    // SedpService::endpoint_matches_ only increments in on_remote_writer
+    // (see sedp.hpp's file-level scope note: "the endpoint_matches counter
+    // go-DDS increments in onRemoteWriter") — i.e. on the side that
+    // discovers a remote *writer* matching one of its own local readers.
+    // pa has E2ETopic's local reader, so pa is the side that matches here;
+    // pb (writer-only, no local reader for this topic) never calls
+    // on_remote_writer with a match, so its own endpoint_matches stays 0.
+    CHECK(pa->discovery_metrics().endpoint_matches >= 1);
+
     pa->close();
     pb->close();
+}
+
+// ── Metrics (relay::IMetricsProvider / IDiscoveryMetricsProvider /
+//    ITopicMetricsProvider) ─────────────────────────────────────────────────
+
+TEST_CASE("metrics(): write/deliver/bytes counters track same-participant pub/sub",
+          "[rtps][participant][metrics]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    auto [sub, sub_ec] = p->new_subscriber("MetTopic", default_qos());
+    REQUIRE_FALSE(sub_ec);
+    auto [pub, pub_ec] = p->new_publisher("MetTopic", default_qos());
+    REQUIRE_FALSE(pub_ec);
+
+    auto m0 = p->metrics();
+    CHECK(m0.write_count == 0);
+
+    CHECK_FALSE(pub->write(std::vector<uint8_t>{1, 2, 3}));
+    CHECK_FALSE(pub->write(std::vector<uint8_t>{4, 5}));
+
+    auto ch = sub->channel();
+    REQUIRE(ch->recv_until(std::chrono::steady_clock::now() + 2s).has_value());
+    REQUIRE(ch->recv_until(std::chrono::steady_clock::now() + 2s).has_value());
+
+    auto m = p->metrics();
+    CHECK(m.write_count     == 2);
+    CHECK(m.bytes_written   == 5); // 3 + 2
+    CHECK(m.deliver_count   == 2);
+    CHECK(m.bytes_delivered == 5);
+
+    p->close();
+}
+
+TEST_CASE("metrics(): drop_count increments when a subscriber's channel is full",
+          "[rtps][participant][metrics]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    // cap=1 channel with DropNewest so extras are dropped.
+    auto depth = relay::with_channel_depth(1);
+    auto [sub, sub_ec] = p->new_subscriber("MetDropTopic", default_qos(), {depth});
+    REQUIRE_FALSE(sub_ec);
+    auto [pub, pub_ec] = p->new_publisher("MetDropTopic", default_qos());
+    REQUIRE_FALSE(pub_ec);
+
+    CHECK_FALSE(pub->write(std::vector<uint8_t>{1})); // delivered
+    CHECK_FALSE(pub->write(std::vector<uint8_t>{2})); // dropped (channel full, DropNewest)
+    CHECK_FALSE(pub->write(std::vector<uint8_t>{3})); // dropped
+
+    // Give the (unconditional, in-process) dispatch a moment — Writer::write
+    // dispatches synchronously before returning, so this is just for
+    // robustness against unrelated scheduling jitter, matching the existing
+    // TransientLocal test's own comment above.
+    std::this_thread::sleep_for(10ms);
+
+    auto m = p->metrics();
+    CHECK(m.write_count   == 3);
+    CHECK(m.deliver_count == 1);
+    CHECK(m.drop_count    == 2);
+
+    p->close();
+}
+
+TEST_CASE("topic_metrics(): tracks per-topic write/deliver/bytes, separate topics get "
+          "separate counters",
+          "[rtps][participant][metrics]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    auto [subA, sa_ec] = p->new_subscriber("TopicMetA", default_qos());
+    REQUIRE_FALSE(sa_ec);
+    auto [pubA, pa_ec] = p->new_publisher("TopicMetA", default_qos());
+    REQUIRE_FALSE(pa_ec);
+    auto [subB, sb_ec] = p->new_subscriber("TopicMetB", default_qos());
+    REQUIRE_FALSE(sb_ec);
+    auto [pubB, pb_ec] = p->new_publisher("TopicMetB", default_qos());
+    REQUIRE_FALSE(pb_ec);
+
+    CHECK_FALSE(pubA->write(std::vector<uint8_t>{1, 2}));
+    CHECK_FALSE(pubA->write(std::vector<uint8_t>{3}));
+    CHECK_FALSE(pubB->write(std::vector<uint8_t>{9, 9, 9, 9}));
+
+    REQUIRE(subA->channel()->recv_until(std::chrono::steady_clock::now() + 2s).has_value());
+    REQUIRE(subA->channel()->recv_until(std::chrono::steady_clock::now() + 2s).has_value());
+    REQUIRE(subB->channel()->recv_until(std::chrono::steady_clock::now() + 2s).has_value());
+
+    auto tms  = p->topic_metrics();
+    auto find = [&](const std::string& t) {
+        return std::find_if(tms.begin(), tms.end(),
+                             [&](const relay::TopicMetrics& m) { return m.topic == t; });
+    };
+    auto a = find("TopicMetA");
+    auto b = find("TopicMetB");
+    REQUIRE(a != tms.end());
+    REQUIRE(b != tms.end());
+    CHECK(a->write_count     == 2);
+    CHECK(a->bytes_written   == 3); // 2 + 1
+    CHECK(a->deliver_count   == 2);
+    CHECK(a->bytes_delivered == 3);
+    CHECK(b->write_count     == 1);
+    CHECK(b->bytes_written   == 4);
+    CHECK(b->deliver_count   == 1);
+    CHECK(b->bytes_delivered == 4);
+
+    p->close();
+}
+
+TEST_CASE("discovery_metrics(): announces_sent increases and peers_known reflects a "
+          "manually injected peer",
+          "[rtps][participant][metrics]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    // The participant's own announce loop starts immediately on create();
+    // send_announcement() is exposed precisely so a test doesn't have to
+    // wait a full announce_period (see spdp.hpp) — call it directly for a
+    // deterministic assertion.
+    p->spdp().send_announcement();
+    CHECK(p->discovery_metrics().announces_sent >= 1);
+
+    CHECK(p->discovery_metrics().peers_known == 0);
+
+    SpdpLocalInfo peer_info;
+    peer_info.guid_prefix          = GuidPrefix{{0x10, 0x20, 0x30, 0x40, 1, 2, 3, 4, 5, 6, 7, 8}};
+    peer_info.meta_unicast_port    = 9999;
+    peer_info.default_unicast_port = 9999;
+    auto announce = build_spdp_announcement(peer_info, SequenceNumber{0, 1});
+    p->spdp().handle_packet(announce, "127.0.0.1");
+
+    auto dm = p->discovery_metrics();
+    CHECK(dm.announces_received >= 1);
+    CHECK(dm.peers_known == 1);
+
+    p->close();
+}
+
+TEST_CASE("discovery_metrics(): peer_evictions increments after a peer's lease expires",
+          "[rtps][participant][metrics]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    SpdpLocalInfo peer_info;
+    peer_info.guid_prefix                = GuidPrefix{{0x11, 0x22, 0x33, 0x44, 1, 2, 3, 4, 5, 6, 7, 8}};
+    peer_info.meta_unicast_port          = 9998;
+    peer_info.default_unicast_port       = 9998;
+    peer_info.advertised_lease_duration  = std::chrono::seconds(1); // short, for a fast test
+    auto announce = build_spdp_announcement(peer_info, SequenceNumber{0, 1});
+    p->spdp().handle_packet(announce, "127.0.0.1");
+    REQUIRE(p->discovery_metrics().peers_known == 1);
+
+    std::this_thread::sleep_for(1100ms);
+    p->spdp().evict_expired();
+
+    auto dm = p->discovery_metrics();
+    CHECK(dm.peers_known == 0);
+    CHECK(dm.peer_evictions == 1);
+
+    p->close();
 }
 
 // ── IPv6 (Tier-1 phase 10 — "IPv6 / wildcard locators", best-effort,

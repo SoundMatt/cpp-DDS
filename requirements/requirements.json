@@ -155,6 +155,22 @@
     "standards": ["RELAY spec §9.1"]
   },
   {
+    "id": "REQ-METRICS-004",
+    "title": "IDiscoveryMetricsProvider interface",
+    "text": "Mock and RTPS participants shall implement relay::IDiscoveryMetricsProvider, exposing discovery-layer statistics (announces_sent, announces_received, peers_known, peer_evictions, endpoint_matches) via discovery_metrics(). The mock always reports zero values (no real network discovery); the RTPS participant sources live counters from SpdpService and SedpService.",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["RELAY spec §9.1"]
+  },
+  {
+    "id": "REQ-METRICS-005",
+    "title": "ITopicMetricsProvider interface",
+    "text": "Mock and RTPS participants shall implement relay::ITopicMetricsProvider, exposing per-topic write/deliver/drop/byte counters via topic_metrics(), with one entry per observed topic.",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["RELAY spec §9.1"]
+  },
+  {
     "id": "REQ-HEALTH-001",
     "title": "IHealthProvider — healthy status",
     "text": "The mock participant shall implement relay::IHealthProvider, returning HealthStatus::OK while active.",

@@ -463,10 +463,28 @@ Also within `ddscore` but not RTPS-specific, carried forward from the previous r
 draft and small enough to slot in opportunistically alongside Tier 1 rather than blocking
 it:
 
-- [ ] `IMetricsProvider` / `IDiscoveryMetricsProvider` / `ITopicMetricsProvider`
+- [x] `IMetricsProvider` / `IDiscoveryMetricsProvider` / `ITopicMetricsProvider`
       implementation on mock and RTPS participants (go-DDS: these interfaces live in the
       core `dds` package, `dds.go`, implemented by `mock`, `rtps`, and exported by
-      `monitor`/`admin` — Tier 5)
+      `monitor`/`admin` — Tier 5). **Done (v0.14.0):** `relay::IDiscoveryMetricsProvider`/
+      `relay::DiscoveryMetrics` and `relay::ITopicMetricsProvider`/`relay::TopicMetrics`
+      ported into `relay.hpp` alongside the pre-existing `relay::IMetricsProvider`, with
+      go-DDS's actual field names (`announces_sent`/`announces_received`/`peers_known`/
+      `peer_evictions`/`endpoint_matches`; `topic`/`write_count`/`deliver_count`/
+      `drop_count`/`bytes_written`/`bytes_delivered`). `dds::mock::IMockParticipant` now
+      also implements both — `discovery_metrics()` always zero-valued (no real network
+      discovery in the mock, matching go-DDS's mock verbatim), `topic_metrics()` backed by
+      a new per-topic counter map on the process-global `Broker`. `dds::rtps::Participant`
+      now implements all three: `metrics()`/`topic_metrics()` from new participant-level
+      and per-topic atomic counters wired into `Writer::write` and `Participant::dispatch`;
+      `discovery_metrics()` sourced live from `SpdpService` (announce/eviction counters,
+      current peer count) and `SedpService` (cumulative endpoint-match counter) — the one
+      place this differs meaningfully from the mock, since RTPS has real discovery state to
+      report. `Reader::deliver` (rtps) now reports Filtered/Delivered/Dropped so
+      `Participant::dispatch` attributes deliver/drop metrics correctly, matching go-DDS's
+      `dispatchToReaders`/`deliverToReader` split (a filtered-out sample counts as neither).
+      Internal/additive, as with every other still-internal RTPS capability — not wired
+      into `dds::adapt()` or any automatic-transport-selection surface.
 - [ ] `IHealthProvider` reporting participant and transport health (same source)
 - [ ] `IDrainer::close_with_drain()` on mock participant
 - [ ] `ILoaningPublisher` (zero-copy loan/commit) backed by a pool allocator;

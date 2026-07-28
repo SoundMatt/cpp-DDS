@@ -10,6 +10,7 @@
 // fusa:test REQ-RELAY-021 REQ-RELAY-022 REQ-RELAY-023 REQ-RELAY-024 REQ-RELAY-025
 // fusa:test REQ-RELAY-026 REQ-RELAY-027 REQ-RELAY-028 REQ-RELAY-029
 // fusa:test REQ-RELAY-051 REQ-RELAY-056 REQ-RELAY-059 REQ-RELAY-060
+// fusa:test REQ-METRICS-004 REQ-METRICS-005
 
 #include <dds/relay.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -218,6 +219,33 @@ TEST_CASE("Metrics struct fields exist and default to zero", "[relay][REQ-RELAY-
 
 TEST_CASE("IMetricsProvider is a polymorphic abstract type", "[relay][REQ-RELAY-027]") {
     CHECK(std::is_abstract<IMetricsProvider>::value);
+}
+
+TEST_CASE("DiscoveryMetrics struct fields exist and default to zero", "[relay][REQ-METRICS-004]") {
+    DiscoveryMetrics m{};
+    CHECK(m.announces_sent     == 0);
+    CHECK(m.announces_received == 0);
+    CHECK(m.peers_known        == 0);
+    CHECK(m.peer_evictions     == 0);
+    CHECK(m.endpoint_matches   == 0);
+}
+
+TEST_CASE("IDiscoveryMetricsProvider is a polymorphic abstract type", "[relay][REQ-METRICS-004]") {
+    CHECK(std::is_abstract<IDiscoveryMetricsProvider>::value);
+}
+
+TEST_CASE("TopicMetrics struct fields exist and default to zero", "[relay][REQ-METRICS-005]") {
+    TopicMetrics m{};
+    CHECK(m.topic.empty());
+    CHECK(m.write_count     == 0);
+    CHECK(m.deliver_count   == 0);
+    CHECK(m.drop_count      == 0);
+    CHECK(m.bytes_written   == 0);
+    CHECK(m.bytes_delivered == 0);
+}
+
+TEST_CASE("ITopicMetricsProvider is a polymorphic abstract type", "[relay][REQ-METRICS-005]") {
+    CHECK(std::is_abstract<ITopicMetricsProvider>::value);
 }
 
 TEST_CASE("IDrainer is a polymorphic abstract type", "[relay][REQ-RELAY-028]") {

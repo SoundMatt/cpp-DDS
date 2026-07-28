@@ -5,7 +5,7 @@
 
 // fusa:test REQ-MOCK-001 REQ-MOCK-002 REQ-MOCK-003 REQ-MOCK-004 REQ-MOCK-005
 // fusa:test REQ-DDS-005 REQ-DDS-006 REQ-DDS-007 REQ-DDS-009
-// fusa:test REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003
+// fusa:test REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003 REQ-METRICS-004 REQ-METRICS-005
 // fusa:test REQ-HEALTH-001 REQ-HEALTH-002
 // fusa:test REQ-SEC-002 REQ-SEC-003 REQ-SEC-004 REQ-SEC-005
 // fusa:test REQ-LIFECYCLE-001 REQ-LIFECYCLE-002 REQ-LIFECYCLE-003
@@ -14,6 +14,7 @@
 
 #include <dds/mock/participant.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <atomic>
@@ -475,6 +476,86 @@ TEST_CASE("metrics: bytes_written reflects payload sizes", "[mock][REQ-METRICS-0
 
     auto m = p->metrics();
     CHECK(m.bytes_written == 5);
+}
+
+// ── Discovery metrics ─────────────────────────────────────────────────────────
+
+TEST_CASE("discovery_metrics: mock always returns zero values (no real network discovery)",
+          "[mock][REQ-METRICS-004]") {
+    auto p = make_p();
+    auto [sub, _s] = p->new_subscriber("discmet/topic", default_qos());
+    auto [pub, _p] = p->new_publisher("discmet/topic", default_qos());
+    CHECK_FALSE(pub->write({1, 2, 3}));
+
+    auto dm = p->discovery_metrics();
+    CHECK(dm.announces_sent     == 0);
+    CHECK(dm.announces_received == 0);
+    CHECK(dm.peers_known        == 0);
+    CHECK(dm.peer_evictions     == 0);
+    CHECK(dm.endpoint_matches   == 0);
+}
+
+// ── Topic metrics ─────────────────────────────────────────────────────────────
+
+TEST_CASE("topic_metrics: tracks write/deliver/drop/bytes per topic", "[mock][REQ-METRICS-005]") {
+    auto p = make_p();
+    auto [sub, _s] = p->new_subscriber("topicmet/A", default_qos());
+    auto [pub, _p] = p->new_publisher("topicmet/A", default_qos());
+
+    CHECK_FALSE(pub->write({1, 2, 3})); // 3 bytes, delivered
+    CHECK_FALSE(pub->write({4, 5}));    // 2 bytes, delivered
+
+    auto tms = p->topic_metrics();
+    auto it  = std::find_if(tms.begin(), tms.end(),
+                             [](const relay::TopicMetrics& t) { return t.topic == "topicmet/A"; });
+    REQUIRE(it != tms.end());
+    CHECK(it->write_count     == 2);
+    CHECK(it->deliver_count   == 2);
+    CHECK(it->drop_count      == 0);
+    CHECK(it->bytes_written   == 5);
+    CHECK(it->bytes_delivered == 5);
+}
+
+TEST_CASE("topic_metrics: separate topics get separate counters", "[mock][REQ-METRICS-005]") {
+    auto p = make_p();
+    auto [subA, _sa] = p->new_subscriber("topicmet/B1", default_qos());
+    auto [pubA, _pa] = p->new_publisher("topicmet/B1", default_qos());
+    auto [subB, _sb] = p->new_subscriber("topicmet/B2", default_qos());
+    auto [pubB, _pb] = p->new_publisher("topicmet/B2", default_qos());
+
+    CHECK_FALSE(pubA->write({1}));
+    CHECK_FALSE(pubA->write({2}));
+    CHECK_FALSE(pubB->write({3}));
+
+    auto tms = p->topic_metrics();
+    auto find = [&](const std::string& t) {
+        return std::find_if(tms.begin(), tms.end(),
+                             [&](const relay::TopicMetrics& m) { return m.topic == t; });
+    };
+    auto a = find("topicmet/B1");
+    auto b = find("topicmet/B2");
+    REQUIRE(a != tms.end());
+    REQUIRE(b != tms.end());
+    CHECK(a->write_count == 2);
+    CHECK(b->write_count == 1);
+}
+
+TEST_CASE("topic_metrics: drop_count tracks per-topic drops", "[mock][REQ-METRICS-005]") {
+    auto p = make_p();
+    auto depth = relay::with_channel_depth(1);
+    auto [sub, _s] = p->new_subscriber("topicmet/C", default_qos(), {depth});
+    auto [pub, _p] = p->new_publisher("topicmet/C", default_qos());
+
+    CHECK_FALSE(pub->write({1})); // delivered
+    CHECK_FALSE(pub->write({2})); // dropped (channel full, DropNewest)
+
+    auto tms = p->topic_metrics();
+    auto it  = std::find_if(tms.begin(), tms.end(),
+                             [](const relay::TopicMetrics& t) { return t.topic == "topicmet/C"; });
+    REQUIRE(it != tms.end());
+    CHECK(it->write_count   == 2);
+    CHECK(it->deliver_count == 1);
+    CHECK(it->drop_count    == 1);
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────

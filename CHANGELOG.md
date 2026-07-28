@@ -6,6 +6,38 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.14.0] — 2026-07-27
+
+### Added
+
+- `IMetricsProvider` / `IDiscoveryMetricsProvider` / `ITopicMetricsProvider`
+  (see `ROADMAP.md`, "Also within `ddscore` but not RTPS-specific"): C++
+  ports of go-DDS's `dds.go` `DiscoveryMetricsProvider`/`DiscoveryMetrics`
+  and `TopicMetricsProvider`/`TopicMetrics` interfaces, added to
+  `relay.hpp` alongside the pre-existing `relay::IMetricsProvider`, with
+  go-DDS's actual field names.
+- `dds::mock::IMockParticipant` now implements both new interfaces:
+  `discovery_metrics()` always returns a zero-valued
+  `relay::DiscoveryMetrics` (the mock has no real network discovery,
+  matching go-DDS's mock verbatim); `topic_metrics()` is backed by a new
+  per-topic counter map on the process-global `Broker`.
+- `dds::rtps::Participant` now implements all three
+  (`relay::IMetricsProvider`/`IDiscoveryMetricsProvider`/
+  `ITopicMetricsProvider`): `metrics()`/`topic_metrics()` from new
+  participant-level and per-topic atomic counters wired into
+  `Writer::write` and `Participant::dispatch`; `discovery_metrics()`
+  sourced live from `SpdpService` (announce/eviction counters, current
+  peer count) and `SedpService` (cumulative endpoint-match counter) —
+  real discovery state, unlike the mock's necessarily-zeroed equivalent.
+  `Reader::deliver` now reports Filtered/Delivered/Dropped so
+  `Participant::dispatch` can attribute deliver/drop metrics correctly,
+  matching go-DDS's `dispatchToReaders`/`deliverToReader` split.
+  Internal/additive, as with every other still-internal RTPS capability —
+  not wired into `dds::adapt()` or any automatic-transport-selection
+  surface.
+
+---
+
 ## [0.13.0] — 2026-07-27
 
 ### Added
