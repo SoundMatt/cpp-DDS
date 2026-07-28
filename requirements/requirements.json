@@ -1123,5 +1123,95 @@
     "standards": [
       "go-DDS bridge/wan/wan.go Bridge.Close, Bridge.Addr"
     ]
+  },
+  {
+    "id": "REQ-BRIDGE-REST-001",
+    "title": "REST bridge topic-list JSON codec",
+    "text": "topics_to_json() shall produce JSON byte-identical to go-DDS's encoding/json.Encoder.Encode() output for a sorted []string of topic names: a compact array of HTML-safe-escaped strings ('<','>','&' escaped as \\u003c/\\u003e/\\u0026, matching Go's default escapeHTML=true) followed by a trailing newline, verified against reference vectors captured from a real go-DDS process.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/rest/rest.go handleList"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-REST-002",
+    "title": "REST bridge SSE wire-format helpers",
+    "text": "sse_message_event(id, payload) shall produce \"id: <id>\\nevent: message\\ndata: <standard-padded-base64(payload)>\\n\\n\" and sse_keepalive_comment() shall produce \": keepalive\\n\\n\", both byte-identical to go-DDS's handleSubscribe fmt.Fprintf output, verified against reference vectors captured from a real go-DDS process.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/rest/rest.go handleSubscribe"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-REST-003",
+    "title": "REST bridge Options and keepalive default",
+    "text": "The system shall define dds::bridge::rest::Options{auth_token, qos, sse_keepalive}; effective_keepalive(opts) shall return opts.sse_keepalive, or 15 seconds when it is exactly zero — matching go-DDS's Options.keepalive() actual behavior (an explicit zero does not disable the keepalive, regardless of its doc comment's claim otherwise).",
+    "category": "functional",
+    "criticality": "medium",
+    "standards": [
+      "go-DDS bridge/rest/rest.go Options, Options.keepalive"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-REST-004",
+    "title": "REST bridge authorization",
+    "text": "Bridge::authorize(authorization) shall return true when options().auth_token is empty, and otherwise return true only when authorization holds exactly the string \"Bearer \" + options().auth_token.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/rest/rest.go Bridge.authorize"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-REST-005",
+    "title": "REST bridge request routing",
+    "text": "classify_request(method, raw_path) shall reproduce go-DDS's ServeHTTP routing exactly: strip a literal \"/topics\" prefix from raw_path if present (left unchanged otherwise); if the remainder is empty or \"/\", classify as Route::list for GET and Route::method_not_allowed otherwise; else strip at most one leading '/' to obtain a topic — Route::subscribe for GET, Route::publish for POST, Route::method_not_allowed for any other method, or Route::bad_request if the topic is empty.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/rest/rest.go Bridge.ServeHTTP"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-REST-006",
+    "title": "REST bridge topic listing and lazy subscriber/publisher caching",
+    "text": "Bridge::list_topics() shall return a sorted snapshot of every topic with a currently-cached subscriber; Bridge::get_subscriber()/get_publisher() shall resolve or lazily create (and cache) a dds::ISubscriber/dds::IPublisher for a topic using options().qos, propagating any dds::IParticipant creation error; Bridge::close() shall close every cached subscriber/publisher and shall be idempotent.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/rest/rest.go Bridge.getOrCreateSub, getOrCreatePub, handleList, Close"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-REST-007",
+    "title": "REST bridge SSE delivery loop",
+    "text": "Bridge::run_sse_loop(sub, sink) shall deliver each sample received on sub's channel to sink.send_message with a bridge-wide monotonically increasing sequence id, shall call sink.send_keepalive approximately every effective_keepalive(options()) of channel inactivity, shall return success once sub's channel closes, shall return success promptly once sink.cancelled() reports true, and shall return failure if any sink send call returns a non-OK error_code.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/rest/rest.go Bridge.handleSubscribe"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-REST-008",
+    "title": "REST bridge publish semantics",
+    "text": "Bridge::handle_publish(topic, payload) shall resolve or lazily create a cached dds::IPublisher for topic and write payload; a publisher-creation error shall be reported as a failure Result whose message is prefixed \"publisher: \", and a write error as a failure Result whose message is prefixed \"publish: \", matching go-DDS's handlePublish error-message prefixes; success returns Result::success().",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/rest/rest.go Bridge.handlePublish"
+    ]
+  },
+  {
+    "id": "REQ-BRIDGE-REST-009",
+    "title": "REST bridge HTTP/1.1 wire protocol (Server)",
+    "text": "dds::bridge::rest::Server shall accept TCP connections on a configurable \"host:port\" address (port 0 selects an OS-assigned port), parse exactly one HTTP/1.1 request per connection (request line, headers, and a Content-Length-framed body capped at 16 MiB, rejecting a larger declared length or an incomplete body with 400), enforce Bridge::authorize before routing, dispatch via classify_request to a JSON topic-list response, a Transfer-Encoding: chunked Server-Sent-Events stream (one chunk per Bridge::run_sse_loop sink call, terminated by a final zero-length chunk), or a publish response (204 on success, 500 with the Result's message on failure); Server::close() shall stop accepting new connections, force-close every open connection, and join every worker thread, be idempotent, and unblock any in-flight SSE stream at its next poll.",
+    "category": "functional",
+    "criticality": "high",
+    "standards": [
+      "go-DDS bridge/rest/rest.go Bridge.ServeHTTP (HTTP/1.1 wire protocol)"
+    ]
   }
 ]

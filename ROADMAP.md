@@ -939,7 +939,60 @@ inventing a bridge spec ahead of the reference implementation.
   tests total, verified locally with Release C++17/C++20 builds and a Debug ASan+UBSan
   pass (gcc 16, macOS) clean. `REQ-BRIDGE-WAN-001` through `REQ-BRIDGE-WAN-007` and
   `REQ-MOCK-006` added, traced and tested.
-- [ ] **`rest`** — REST bridge (go-DDS `bridge/rest`).
+- [x] **`rest`** — REST bridge (go-DDS `bridge/rest`). **Done (v0.25.0):**
+  `dds::bridge::rest::Bridge` + `dds::bridge::rest::Server`, a third member of
+  `cppdds_bridges`, ported one-for-one from `rest.go` — `GET /topics` returns a JSON
+  array of currently-subscribed topic names, `GET /topics/{topic}` opens a Server-Sent
+  Events (SSE) stream of samples published on that topic, and `POST /topics/{topic}`
+  publishes the request body as one sample. Split the same way as the grpc bridge
+  (`grpc.hpp`/`transport.hpp`): `rest.hpp`/`rest.cpp` hold pure business logic (JSON/SSE
+  codec, `classify_request` routing, `Bridge`'s lazy subscriber/publisher caching,
+  `authorize()`, and `run_sse_loop`/`handle_publish` driven through an abstract
+  `SseSink` — enough surface to unit-test directly with an in-memory double, mirroring
+  go-DDS's own `grpc_internal_test.go` mock-stream pattern, independent of any
+  networking); `transport.hpp`/`transport.cpp` hand-roll a minimal but genuinely valid
+  HTTP/1.1 request/response parser+writer over raw TCP sockets (this repo has no HTTP
+  library dependency anywhere — every other module hand-rolls its own wire protocol:
+  RTPS, CDR, xtypes, TSN netlink, and the grpc/wan bridges' own framing). Unlike the
+  grpc bridge (which deliberately does *not* speak real HTTP/2), this transport is a
+  byte-exact-verified HTTP/1.1 server: Content-Length-framed unary responses for the
+  topic list/publish/error paths, and `Transfer-Encoding: chunked` for the SSE stream
+  (one chunk per sample or keepalive comment, terminated by a final zero-length chunk),
+  matching a real go-DDS process's actual wire bytes exactly — captured via a raw
+  `net.Dial` (not `net/http`'s client, which transparently de-chunks responses) against
+  a fresh `github.com/SoundMatt/go-DDS` clone, per this repo's established
+  vector-derivation convention. The one deliberate simplification, carried over from the
+  grpc bridge's own precedent, is "one HTTP request per TCP connection" — no
+  keep-alive/pipelining of multiple requests on the same connection. `topics_to_json()`
+  (a compact JSON array of HTML-safe-escaped topic name strings, matching Go's default
+  `escapeHTML=true`, with the trailing `"\n"` `encoding/json.Encoder.Encode` appends)
+  and the SSE `"id: <n>\nevent: message\ndata: <base64>\n\n"` / `": keepalive\n\n"` wire
+  formats are verified against reference vectors captured from a real go-DDS process,
+  including go's actual (if oddly documented) `Options.keepalive()` behavior: an
+  explicit zero does *not* disable the keepalive, despite its doc comment's claim
+  otherwise — `effective_keepalive()` reproduces the real function, not the misleading
+  comment. `classify_request` reproduces go's `strings.TrimPrefix`-based `ServeHTTP`
+  routing byte-for-byte, including its documented quirks (`GET /topics/` also lists
+  topics; a path not literally starting with `/topics` is still routed by its
+  remainder) and its one practically-unreachable `Route::bad_request` branch (kept for
+  fidelity, untested for the same reason go-DDS's own equivalent is untested — no input
+  can reach it). One documented, low-risk departure from a literal port: go's
+  `handlePublish` silently truncates a request body over its 16 MiB cap
+  (`io.LimitReader` never errors); every other wire boundary in this repo treats an
+  oversized declared length as a rejected error instead of a silent truncation
+  (`dds::bridge::wan`'s `ErrFrameTooLarge`, `dds::bridge::grpc::transport`'s
+  `kMaxFrameSize`), so this bridge does too. Verified with 48 new tests
+  (`tests/test_bridge_rest.cpp`) — byte-exact JSON/SSE reference-vector tests,
+  `classify_request` routing-quirk unit tests, `Bridge` business-logic unit tests against
+  a real (no-socket) mock participant, `run_sse_loop` unit tests against an in-memory
+  `SseSink` double covering delivery/keepalive/cancellation/write-failure paths, and real
+  loopback-TCP end-to-end tests (`Server`) covering the topic list, publish, SSE chunked
+  streaming, auth accept/reject, method-not-allowed, oversized/truncated bodies,
+  malformed request lines, and idempotent `Server::close()` unblocking a live SSE
+  stream — 665/665 tests total, verified locally with Release C++17/C++20 builds and a
+  Debug ASan+UBSan pass clean. `REQ-BRIDGE-REST-001` through `REQ-BRIDGE-REST-009` added,
+  traced and tested. This is the last item of Tier 4 (`grpc` v0.23.0, `wan` v0.24.0,
+  `rest` v0.25.0 — all now done).
 
 ## Tier 5 — observability (v0.6.0)
 
