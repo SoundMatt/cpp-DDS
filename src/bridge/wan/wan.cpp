@@ -425,12 +425,24 @@ void ensure_winsock_initialized() {
     (void)guard;
 }
 void close_native(NativeSocket s) { ::closesocket(s); }
+void shutdown_both(NativeSocket s) { ::shutdown(s, SD_BOTH); }
 #else
 using NativeSocket = int;
 constexpr NativeSocket kInvalidSocket = -1;
 
 void ensure_winsock_initialized() {}
 void close_native(NativeSocket s) { ::close(s); }
+// shutdown_both is required (close() alone is not enough) to reliably
+// unblock a *different* thread's concurrent blocking recv()/send() on the
+// same fd — e.g. Bridge::close() force-closing a server connection whose
+// handle_connection thread is blocked in read_frame()'s recv_exact()
+// waiting for the next frame. On Linux, close()-from-another-thread does
+// not wake a thread blocked in recv() on that fd (the fd may even be
+// silently reused by a racing open() before the blocked thread notices);
+// shutdown(fd, SHUT_RDWR) does, per POSIX. macOS/BSD happen to wake a
+// blocked recv() on close() too, which is why this only reproduced on
+// Linux (gcc-12 CI) and not local macOS testing.
+void shutdown_both(NativeSocket s) { ::shutdown(s, SHUT_RDWR); }
 #endif
 
 bool send_all(NativeSocket s, const uint8_t* data, std::size_t len) {
@@ -632,7 +644,13 @@ struct Bridge::Impl {
 
     void close_all_conns() {
         std::lock_guard<std::mutex> lk(conns_mu);
-        for (auto c : conns) close_native(c);
+        for (auto c : conns) {
+            // shutdown() before close(): see shutdown_both's doc comment —
+            // required to reliably interrupt another thread possibly
+            // blocked in recv()/send() on this same fd right now.
+            shutdown_both(c);
+            close_native(c);
+        }
         conns.clear();
     }
 
