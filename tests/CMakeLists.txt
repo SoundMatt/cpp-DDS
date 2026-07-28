@@ -22,17 +22,23 @@ add_executable(cppdds_tests
     test_security_replay.cpp
     test_xtypes.cpp
     test_cdr.cpp
+    test_idl.cpp
+    test_ddstool_cli.cpp
+    idl_roundtrip/test_idl_roundtrip.cpp
 )
 
 target_link_libraries(cppdds_tests
     PRIVATE
         cppdds_lib
+        ddstool_cli
         Catch2::Catch2WithMain
 )
 
 target_include_directories(cppdds_tests
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ddstool
+        ${CMAKE_CURRENT_SOURCE_DIR}/idl_roundtrip
 )
 
 include(CTest)

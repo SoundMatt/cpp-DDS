@@ -6,6 +6,78 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.21.0] — 2026-07-27
+
+### Added
+
+- `dds::idl` (`include/dds/idl/idl.hpp`, `src/idl/parser.cpp`,
+  `src/idl/gen.cpp`) — an OMG IDL lexer/parser plus a C++ code generator, a
+  faithful C++ port of go-DDS's `tools/idl` package, the third item of
+  `ROADMAP.md`'s "Tier 3 — xtypes, tsn, idl, cdr". `parse_string()`/
+  `parse_file()` parse module declarations (nestable), struct declarations
+  (fields, `@key` annotation, qualified `Module::Name` references),
+  enum declarations, typedef aliases, basic types, bounded/unbounded
+  sequences, bounded strings, and fixed-size arrays, returning a `Module`
+  tree or a line-numbered `ParseError`. `generate()` emits a self-contained
+  C++ header: a struct/`enum class`/`using`-alias per IDL declaration
+  (field/type names verbatim, no PascalCase conversion — C++ has no
+  public/private-by-case rule to satisfy) plus a `<Name>Codec` per struct
+  with `marshal()`/`unmarshal()` built on `dds::cdr::Encoder`/`Decoder`
+  (Tier 3, `cdr`, v0.20.0) and `key_fields()`. Nested struct/enum
+  references are inlined recursively at the call site with no wrapper
+  header, matching CDR's own wire semantics and go-DDS's own generator
+  exactly, with a cycle guard for self-referential struct graphs. Two
+  behaviors were independently confirmed against a fresh go-DDS clone
+  before porting (neither stated in go-DDS's own test matrix): the emitted
+  namespace is always `idlgen` unless the caller overrides the root
+  `Module`'s name first (go-DDS's own top-level `Generate` package-naming
+  quirk), and a parenthesized annotation argument (`@id(5)`) is a parse
+  error rather than being silently accepted (go-DDS's lexer has no `(`/`)`
+  token, so its `(...)`-skip branch never actually triggers) — both
+  faithfully preserved, not "fixed". Unlike go-DDS's generator, no
+  `TypedPublisher`/`TypedSubscriber` factory functions are emitted
+  (cpp-DDS has no `dds::Codec<T>`/`TypedPublisher<T>` abstraction yet) —
+  a deliberate, documented scope difference.
+- `ddstool` (`ddstool/cli.hpp`, `ddstool/cli.cpp`, `ddstool/main.cpp`) — a
+  standalone CLI executable target exposing the `idl` subcommand
+  (`ddstool idl [-out <file>] [-namespace <name>] <input.idl>`), distinct
+  from the existing `cpp-dds` RELAY-conformance CLI under `cli/`. The
+  subcommand-dispatch/`idl` logic lives in a small `ddstool_cli` static
+  library (linked by both the executable and the test suite) so it can be
+  exercised in-process rather than only via subprocess spawn. `pub`/`sub`/
+  `discover` (present in go-DDS's reference `cmd/ddstool`) are out of scope
+  for this item.
+- A checked-in round-trip fixture (`tests/idl_roundtrip/schema.idl` +
+  `schema_gen.hpp`, the latter produced by actually running the `ddstool`
+  binary this PR adds — not hand-written) mirroring go-DDS's own
+  `tools/idl/roundtrip/` package shape field-for-field, giving genuine
+  end-to-end confidence the generator's *output* both compiles and behaves
+  correctly, not just that its source text contains the right tokens.
+  `Header`/`Telemetry` `marshal()` output verified byte-exact against
+  reference vectors independently derived from a fresh go-DDS clone
+  (calling the actual go-DDS-generated `HeaderCodec{}.Marshal`/
+  `TelemetryCodec{}.Marshal` from a scratch `_test.go` file, never
+  committed upstream).
+- 101 new tests: `tests/test_idl.cpp` (44 — parser/generator behavior,
+  mirroring go-DDS's `idl_test.go` matrix plus the two independently
+  confirmed behaviors above and additional parse-error/cycle-guard
+  coverage), `tests/test_ddstool_cli.cpp` (13 — subcommand dispatch, `idl`
+  flag parsing, stdout vs. `-out` file writing, error paths), and
+  `tests/idl_roundtrip/test_idl_roundtrip.cpp` (18 — byte-exact vectors,
+  round trips, `key_fields()`, buffer-truncation rejection at every field
+  boundary, mirroring go-DDS's `roundtrip/schema_test.go` matrix) — 500/500
+  tests total. Adds `REQ-IDL-001` through `REQ-IDL-009`, traced and tested.
+
+Verified locally: Release C++17 build clean, the new `src/idl/*.cpp`,
+`ddstool/*.cpp`, and test files additionally compiled warning-clean under a
+genuine `-std=c++20` invocation directly (this repo's CMakeLists.txt
+hard-sets `CMAKE_CXX_STANDARD 17`, so a real standalone `-std=c++20`
+compiler invocation is how the C++20 leg is actually exercised locally, per
+phase 6's established precedent), ctest 500/500, Debug ASan+UBSan pass on
+macOS/AppleClang. ROADMAP.md checked off.
+
+---
+
 ## [0.20.0] — 2026-07-27
 
 ### Added
