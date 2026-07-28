@@ -107,6 +107,62 @@ jobs:
           UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
         run: ctest --test-dir build-san --output-on-failure -j1
 
+  # ── RTPS interop against CycloneDDS (optional, service-gated) ─────────────
+  # Builds with -DCPPDDS_INTEROP_TESTS=ON, starts a CycloneDDS container over
+  # host networking (real UDP/multicast SPDP/SEDP), and runs the interop
+  # CTest suite. Deliberately not a `needs:` dependency of, or depended on
+  # by, any other job — it's excluded from the default build-and-test matrix
+  # entirely (see interop/README.md and ROADMAP.md's "Interop testing
+  # infrastructure" section) and skips gracefully (green) rather than
+  # failing when the CycloneDDS Docker image is unavailable in the runner's
+  # registry, mirroring go-DDS's own test-interop CI job exactly.
+  test-interop:
+    name: RTPS interop (CycloneDDS, ubuntu-22.04)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Probe Docker and CycloneDDS image
+        id: probe
+        run: |
+          if docker pull eclipse-cyclonedds/cyclonedds:latest 2>/dev/null; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CycloneDDS Docker image not available — skipping interop tests"
+          fi
+
+      - name: Start CycloneDDS peer
+        if: steps.probe.outputs.available == 'true'
+        run: docker compose -f interop/docker-compose.yml up -d cyclone-peer
+
+      - name: Configure (CPPDDS_INTEROP_TESTS=ON)
+        if: steps.probe.outputs.available == 'true'
+        run: |
+          cmake -B build-interop \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCPPDDS_INTEROP_TESTS=ON \
+            -G Ninja
+
+      - name: Build
+        if: steps.probe.outputs.available == 'true'
+        run: cmake --build build-interop --parallel
+
+      - name: Run interop CTest suite
+        if: steps.probe.outputs.available == 'true'
+        env:
+          INTEROP_TIMEOUT: "15s"
+        run: ctest --test-dir build-interop -L interop --output-on-failure -j1
+
+      - name: Stop CycloneDDS peer
+        if: steps.probe.outputs.available == 'true'
+        run: docker compose -f interop/docker-compose.yml down
+
   coverage:
     name: Coverage (LCOV)
     runs-on: ubuntu-22.04

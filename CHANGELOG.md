@@ -6,6 +6,42 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.11.0] — 2026-07-27
+
+### Added
+
+- RTPS wire-level interop testing infrastructure (see `ROADMAP.md`, "Interop testing
+  infrastructure (new need — not just golden vectors)"): a new `interop/` directory,
+  mirroring go-DDS's own `interop/` package pattern exactly.
+- `interop/test_interop.cpp`: brings up a real (non-`test_mode`, real-multicast)
+  `dds::rtps::Participant` and verifies SPDP/SEDP discovery converges and samples
+  cross in both directions against a live CycloneDDS peer — the CycloneDDS-peer leg
+  of the roadmap's eventual cpp-DDS ⇄ go-DDS / cpp-DDS ⇄ CycloneDDS / cpp-DDS ⇄
+  rust-DDS 3-way matrix, and go-DDS's own first interop target and reference pattern.
+- `interop/docker-compose.yml`: brings up a CycloneDDS peer container
+  (`cyclone-peer`, plus single-direction `cyclone-sub`/`cyclone-pub` profile
+  services), same shape as go-DDS's own `interop/docker-compose.yml`.
+- New `CPPDDS_INTEROP_TESTS` CMake option (default `OFF`): the CMake/CTest
+  equivalent of go-DDS's `go:build interop` tag. With it off — the default for every
+  normal build, including CI's `build-and-test` matrix — `interop/`'s tests are
+  never compiled, linked, or registered with CTest. With it on, the resulting
+  `cppdds_interop_tests` target tags every test with the CTest label `interop` and
+  `SKIP_RETURN_CODE 4`, so a run with no live peer reports "Not Run" rather than
+  "Failed".
+- `INTEROP_DOMAIN` / `INTEROP_TIMEOUT` environment variables, matching go-DDS's own
+  convention exactly.
+- New opt-in `test-interop` CI job: builds with `-DCPPDDS_INTEROP_TESTS=ON`, brings
+  up the CycloneDDS peer, and runs the interop CTest suite — probe-gated to skip
+  gracefully if the CycloneDDS Docker image is unavailable, and not a dependency of
+  (or depended on by) any other job, mirroring go-DDS's own `test-interop` job.
+- `interop/README.md`: prerequisites, local quick-start, and what each test verifies.
+- Verified locally: default (`CPPDDS_INTEROP_TESTS=OFF`) Release C++17/C++20 builds
+  unaffected (264/264 existing tests still pass); with the option on, the new suite
+  builds warning-clean under a genuine `-std=c++20` invocation and passes under both
+  a plain build and a Debug ASan+UBSan pass.
+- Scope: additive testing infrastructure only — no changes to `cppdds_lib`'s public
+  or internal API surface.
+
 ## [0.10.0] — 2026-07-27
 
 ### Added

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(cppdds
-    VERSION 0.10.0
+    VERSION 0.11.0
     DESCRIPTION "C++ DDS library — RELAY-conformant"
     HOMEPAGE_URL "https://github.com/SoundMatt/cpp-DDS"
     LANGUAGES CXX
@@ -78,6 +78,23 @@ option(CPPDDS_BUILD_TESTS "Build tests" ON)
 if(CPPDDS_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+# ── Interop tests (opt-in, RTPS wire-level against a live CycloneDDS peer) ────
+#
+# Mirrors go-DDS's `go:build interop` tag: a dedicated CMake option, default
+# OFF, producing a separate cppdds_interop_tests executable/CTest suite that
+# is never built, linked, or registered by the default `cmake --build` /
+# `ctest` invocation (including the CI build-and-test matrix). See
+# interop/README.md for prerequisites and how to run this suite locally, and
+# ROADMAP.md's "Interop testing infrastructure" section for why this exists
+# alongside (not instead of) the byte-vector golden-vector tests in tests/.
+option(CPPDDS_INTEROP_TESTS
+    "Build RTPS wire-level interop tests against a live CycloneDDS peer (see interop/README.md)"
+    OFF)
+if(CPPDDS_INTEROP_TESTS)
+    enable_testing()
+    add_subdirectory(interop)
 endif()
 
 # ── CLI binary ────────────────────────────────────────────────────────────────
