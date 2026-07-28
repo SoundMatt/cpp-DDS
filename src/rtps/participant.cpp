@@ -209,20 +209,29 @@ public:
         return t;
     }
 
+    // Outcome of a deliver() call — distinguishes "filtered out" (never
+    // counted as delivered or dropped, matching go-DDS's dispatchToReaders
+    // checking r.filter *before* calling deliverToReader) from an actual
+    // channel-level delivery or backpressure drop (dds::ITopicMetricsProvider
+    // / dds::IMetricsProvider counters — see Participant::dispatch).
+    enum class DeliverOutcome { Filtered, Delivered, Dropped };
+
     // Applies the sample filter (if any) and enqueues per back_pressure_.
-    void deliver(const Sample& s) {
-        if (filter_ && !filter_(s)) return;
+    DeliverOutcome deliver(const Sample& s) {
+        if (filter_ && !filter_(s)) return DeliverOutcome::Filtered;
+        bool ok = false;
         switch (back_pressure_) {
             case relay::BackPressurePolicy::DropOldest:
-                ch_->send_drop_oldest(s);
+                ok = ch_->send_drop_oldest(s);
                 break;
             case relay::BackPressurePolicy::Block:
-                ch_->send(s);
+                ok = ch_->send(s);
                 break;
             default: // DropNewest
-                ch_->try_send(s);
+                ok = (ch_->try_send(s) == dds::Chan<Sample>::SendResult::Ok);
                 break;
         }
+        return ok ? DeliverOutcome::Delivered : DeliverOutcome::Dropped;
     }
 
     // Closes the channel directly (used by Participant::close() to
@@ -296,6 +305,16 @@ public:
         const auto     now = std::chrono::system_clock::now();
         const GUID     source{p_->guid_prefix(), eid_};
         const SequenceNumber seq_num = u64_to_sn(seq);
+
+        // dds::IMetricsProvider / ITopicMetricsProvider write counters —
+        // matches go-DDS's rtpsWriter.Write incrementing w.p.mWrites /
+        // topicTC.writes immediately after the QoS checks pass, before
+        // building wire bytes.
+        p_->m_writes_.fetch_add(1);
+        p_->m_bytes_written_.fetch_add(payload.size());
+        auto topic_tc = p_->topic_counters_for(topic_);
+        topic_tc->write_count.fetch_add(1);
+        topic_tc->bytes_written.fetch_add(payload.size());
 
         // Build wire bytes from existing, already byte-verified primitives
         // only (cdr_wrap_payload from phase 2, DataSubmessage::encode from
@@ -764,7 +783,28 @@ void Participant::dispatch(const GUID& source, const std::string& topic_filter,
         s.timestamp        = ts;
         s.sequence_number  = seq_num;
         s.writer_guid      = writer_dds;
-        r->deliver(s);
+
+        // dds::IMetricsProvider / ITopicMetricsProvider deliver/drop
+        // counters — keyed by the *reader's* topic (matches go-DDS's
+        // deliverToReader using r.topic, not the incoming write's topic,
+        // which matters when topic_filter == "" during UDP-receive
+        // dispatch). Filtered-out samples (DeliverOutcome::Filtered) are
+        // not counted at all, matching go-DDS's dispatchToReaders checking
+        // r.filter *before* calling deliverToReader.
+        const auto outcome = r->deliver(s);
+        if (outcome != Reader::DeliverOutcome::Filtered) {
+            auto topic_tc = topic_counters_for(r->topic());
+            const uint64_t byte_len = payload.size();
+            if (outcome == Reader::DeliverOutcome::Delivered) {
+                m_delivers_.fetch_add(1);
+                m_bytes_delivered_.fetch_add(byte_len);
+                topic_tc->deliver_count.fetch_add(1);
+                topic_tc->bytes_delivered.fetch_add(byte_len);
+            } else {
+                m_drops_.fetch_add(1);
+                topic_tc->drop_count.fetch_add(1);
+            }
+        }
     }
 }
 
@@ -802,6 +842,66 @@ std::optional<Sample> Participant::last_sample(const std::string& topic) const {
     auto                          it = last_samples_.find(topic);
     if (it == last_samples_.end()) return std::nullopt;
     return it->second;
+}
+
+// ── dds::IMetricsProvider / IDiscoveryMetricsProvider /
+// ITopicMetricsProvider (DDS-package-scoped; mirrors go-DDS's dds.go) ────────
+
+// topic_counters_for returns (creating on first access) the per-topic
+// counter block for topic. Matches go-DDS's participant.topicCounterFor.
+std::shared_ptr<Participant::TopicCounters> Participant::topic_counters_for(const std::string& topic) {
+    std::lock_guard<std::mutex> lock(topic_metrics_mu_);
+    auto it = topic_metrics_.find(topic);
+    if (it != topic_metrics_.end()) return it->second;
+    auto tc = std::make_shared<TopicCounters>();
+    topic_metrics_.emplace(topic, tc);
+    return tc;
+}
+
+// dds_metrics implements dds::IMetricsProvider. Matches go-DDS's
+// participant.Metrics().
+// fusa:req REQ-METRICS-004
+Metrics Participant::dds_metrics() const {
+    Metrics m;
+    m.write_count     = m_writes_.load();
+    m.deliver_count    = m_delivers_.load();
+    m.drop_count       = m_drops_.load();
+    m.bytes_written    = m_bytes_written_.load();
+    m.bytes_delivered  = m_bytes_delivered_.load();
+    return m;
+}
+
+// discovery_metrics implements dds::IDiscoveryMetricsProvider, reporting
+// live SPDP/SEDP counters. Matches go-DDS's participant.DiscoveryMetrics().
+// fusa:req REQ-METRICS-005
+DiscoveryMetrics Participant::discovery_metrics() const {
+    DiscoveryMetrics dm;
+    dm.announces_sent     = spdp_->announces_sent();
+    dm.announces_received = spdp_->announces_received();
+    dm.peers_known         = spdp_->peers().size();
+    dm.peer_evictions      = spdp_->peer_evictions();
+    dm.endpoint_matches    = sedp_->endpoint_matches();
+    return dm;
+}
+
+// topic_metrics implements dds::ITopicMetricsProvider. Matches go-DDS's
+// participant.TopicMetrics().
+// fusa:req REQ-METRICS-006
+std::vector<TopicMetrics> Participant::topic_metrics() const {
+    std::vector<TopicMetrics> result;
+    std::lock_guard<std::mutex> lock(topic_metrics_mu_);
+    result.reserve(topic_metrics_.size());
+    for (auto& [topic, tc] : topic_metrics_) {
+        TopicMetrics tm;
+        tm.topic           = topic;
+        tm.write_count     = tc->write_count.load();
+        tm.deliver_count   = tc->deliver_count.load();
+        tm.drop_count      = tc->drop_count.load();
+        tm.bytes_written   = tc->bytes_written.load();
+        tm.bytes_delivered = tc->bytes_delivered.load();
+        result.push_back(std::move(tm));
+    }
+    return result;
 }
 
 // ── data receive loop ────────────────────────────────────────────────────────

@@ -228,7 +228,12 @@ struct ParticipantOptions {
 // C++ port of the entity-lifecycle and best-effort-dispatch portions of
 // go-DDS's rtps.participant — see the file-level scope note for exactly
 // what is and is not ported at this phase.
-class Participant : public IParticipant, public std::enable_shared_from_this<Participant> {
+// fusa:req REQ-METRICS-004 REQ-METRICS-005 REQ-METRICS-006
+class Participant : public IParticipant,
+                     public IMetricsProvider,
+                     public IDiscoveryMetricsProvider,
+                     public ITopicMetricsProvider,
+                     public std::enable_shared_from_this<Participant> {
 public:
     // Binds sockets, starts SPDP/SEDP and the participant's own receive/
     // bridge threads, and returns a ready-to-use participant. Returns
@@ -273,6 +278,20 @@ public:
     bool ipv6_enabled() const noexcept { return data_sock_v6_.valid(); }
     int  data_unicast_port_v6() const noexcept { return data_sock_v6_.valid() ? data_sock_v6_.port() : 0; }
 
+    // ── dds::IMetricsProvider / IDiscoveryMetricsProvider /
+    // ITopicMetricsProvider (DDS-package-scoped; mirrors go-DDS's dds.go) ──
+    // See dds.hpp's "Metrics providers" section for why the DDS-scoped
+    // metrics accessor is `dds_metrics()` rather than `metrics()`.
+
+    // fusa:req REQ-METRICS-004
+    Metrics dds_metrics() const override;
+
+    // fusa:req REQ-METRICS-005
+    DiscoveryMetrics discovery_metrics() const override;
+
+    // fusa:req REQ-METRICS-006
+    std::vector<TopicMetrics> topic_metrics() const override;
+
 private:
     friend class Writer;
     friend class Reader;
@@ -307,6 +326,31 @@ private:
 
     const std::string& persist_dir() const noexcept { return persist_dir_; }
     std::chrono::milliseconds heartbeat_period() const noexcept { return heartbeat_period_; }
+
+    // ── metrics counters (dds::IMetricsProvider / ITopicMetricsProvider) ───
+    // Per-topic breakdown of write/deliver/drop counts, keyed by topic name.
+    // Matches go-DDS's participant.topicCounterFor. Writer::write() (this
+    // file's .cpp) increments write_count/bytes_written on every publish;
+    // Participant::dispatch() increments deliver_count/drop_count/
+    // bytes_delivered per delivered-or-dropped reader, mirroring go-DDS's
+    // rtpsWriter.Write / participant.deliverToReader split exactly.
+    struct TopicCounters {
+        std::atomic<uint64_t> write_count{0};
+        std::atomic<uint64_t> bytes_written{0};
+        std::atomic<uint64_t> deliver_count{0};
+        std::atomic<uint64_t> drop_count{0};
+        std::atomic<uint64_t> bytes_delivered{0};
+    };
+    std::shared_ptr<TopicCounters> topic_counters_for(const std::string& topic);
+
+    // Participant-level aggregate counters (dds::IMetricsProvider), summed
+    // across every topic — matches go-DDS's participant.mWrites/mDelivers/
+    // mDrops/mBytesWritten/mBytesDeliv.
+    std::atomic<uint64_t> m_writes_{0};
+    std::atomic<uint64_t> m_delivers_{0};
+    std::atomic<uint64_t> m_drops_{0};
+    std::atomic<uint64_t> m_bytes_written_{0};
+    std::atomic<uint64_t> m_bytes_delivered_{0};
 
     // ── reliable delivery (Tier-1 phase 7) ──────────────────────────────
     // See reliable.hpp / types.hpp (Heartbeat/AckNack/Gap) and
@@ -410,6 +454,9 @@ private:
 
     std::atomic<bool> data_running_v6_{false};
     std::thread        data_thread_v6_;
+
+    mutable std::mutex                                              topic_metrics_mu_;
+    std::unordered_map<std::string, std::shared_ptr<TopicCounters>> topic_metrics_;
 };
 
 } // namespace dds::rtps

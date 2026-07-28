@@ -6,6 +6,7 @@
 // fusa:test REQ-MOCK-001 REQ-MOCK-002 REQ-MOCK-003 REQ-MOCK-004 REQ-MOCK-005
 // fusa:test REQ-DDS-005 REQ-DDS-006 REQ-DDS-007 REQ-DDS-009
 // fusa:test REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003
+// fusa:test REQ-METRICS-004 REQ-METRICS-005 REQ-METRICS-006
 // fusa:test REQ-HEALTH-001 REQ-HEALTH-002
 // fusa:test REQ-SEC-002 REQ-SEC-003 REQ-SEC-004 REQ-SEC-005
 // fusa:test REQ-LIFECYCLE-001 REQ-LIFECYCLE-002 REQ-LIFECYCLE-003
@@ -475,6 +476,120 @@ TEST_CASE("metrics: bytes_written reflects payload sizes", "[mock][REQ-METRICS-0
 
     auto m = p->metrics();
     CHECK(m.bytes_written == 5);
+}
+
+// ── dds::IMetricsProvider / IDiscoveryMetricsProvider / ITopicMetricsProvider ──
+// (DDS-package-scoped; mirrors go-DDS's dds.go)
+
+TEST_CASE("dds_metrics: write/deliver/drop counts mirror relay::IMetricsProvider",
+          "[mock][REQ-METRICS-004]") {
+    auto p = make_p();
+    auto [sub1, _s1] = p->new_subscriber("ddsmet/topic", default_qos());
+    auto [sub2, _s2] = p->new_subscriber("ddsmet/topic", default_qos());
+    auto [pub, _p]   = p->new_publisher("ddsmet/topic", default_qos());
+
+    auto m0 = p->dds_metrics();
+    CHECK(m0.write_count == 0);
+
+    CHECK_FALSE(pub->write({1, 2, 3}));
+
+    auto m = p->dds_metrics();
+    CHECK(m.write_count     == 1);
+    CHECK(m.bytes_written   == 3);
+    CHECK(m.deliver_count   == 2); // 2 subscribers
+    CHECK(m.bytes_delivered == 6); // 3 bytes * 2 subscribers
+
+    // dds_metrics() and relay's metrics() report the same underlying
+    // counters — a deliberate design choice (see dds.hpp's "Metrics
+    // providers" section) since the mock keeps one counter set, not two.
+    auto relay_m = p->metrics();
+    CHECK(m.write_count   == relay_m.write_count);
+    CHECK(m.deliver_count == relay_m.deliver_count);
+}
+
+TEST_CASE("dds_discovery_metrics: mock always reports zero values",
+          "[mock][REQ-METRICS-005]") {
+    auto p = make_p();
+    auto [pub, _p] = p->new_publisher("ddsdisc/topic", default_qos());
+    CHECK_FALSE(pub->write({1, 2, 3}));
+
+    // Matches go-DDS's mock.participant.DiscoveryMetrics doc comment
+    // verbatim: "The mock has no real network discovery; this always
+    // returns zero values."
+    auto dm = p->discovery_metrics();
+    CHECK(dm.announces_sent     == 0);
+    CHECK(dm.announces_received == 0);
+    CHECK(dm.peers_known        == 0);
+    CHECK(dm.peer_evictions     == 0);
+    CHECK(dm.endpoint_matches   == 0);
+}
+
+TEST_CASE("dds_topic_metrics: per-topic breakdown of write/deliver/drop",
+          "[mock][REQ-METRICS-006]") {
+    auto p = make_p();
+    auto [subA, _sA] = p->new_subscriber("ddstopic/a", default_qos());
+    auto [pubA, _pA] = p->new_publisher("ddstopic/a", default_qos());
+    auto [pubB, _pB] = p->new_publisher("ddstopic/b", default_qos());
+
+    CHECK_FALSE(pubA->write({1, 2}));      // ddstopic/a: 1 write, 1 deliver
+    CHECK_FALSE(pubB->write({1, 2, 3}));   // ddstopic/b: 1 write, 0 delivers (no subscriber)
+    CHECK_FALSE(pubB->write({4, 5, 6, 7})); // ddstopic/b: 2 writes total
+
+    auto topics = p->topic_metrics();
+    REQUIRE(topics.size() == 2);
+
+    dds::TopicMetrics a, b;
+    bool found_a = false, found_b = false;
+    for (auto& tm : topics) {
+        if (tm.topic == "ddstopic/a") { a = tm; found_a = true; }
+        if (tm.topic == "ddstopic/b") { b = tm; found_b = true; }
+    }
+    REQUIRE(found_a);
+    REQUIRE(found_b);
+
+    CHECK(a.write_count     == 1);
+    CHECK(a.bytes_written   == 2);
+    CHECK(a.deliver_count   == 1);
+    CHECK(a.bytes_delivered == 2);
+
+    CHECK(b.write_count     == 2);
+    CHECK(b.bytes_written   == 7); // 3 + 4
+    CHECK(b.deliver_count   == 0); // no subscriber on ddstopic/b
+}
+
+TEST_CASE("dds_topic_metrics: empty before any write", "[mock][REQ-METRICS-006]") {
+    auto p = make_p();
+    CHECK(p->topic_metrics().empty());
+}
+
+// ── IMockParticipant DDS-scoped interface hierarchy ────────────────────────────
+
+TEST_CASE("IMockParticipant implements the DDS-package-scoped metrics providers",
+          "[mock][REQ-METRICS-004][REQ-METRICS-005][REQ-METRICS-006]") {
+    auto p = make_p();
+
+    dds::IMetricsProvider*          mp = p.get();
+    dds::IDiscoveryMetricsProvider* dp = p.get();
+    dds::ITopicMetricsProvider*     tp = p.get();
+
+    CHECK(mp != nullptr);
+    CHECK(dp != nullptr);
+    CHECK(tp != nullptr);
+
+    CHECK(mp->dds_metrics().write_count == 0);
+    CHECK(dp->discovery_metrics().peers_known == 0);
+    CHECK(tp->topic_metrics().empty());
+
+    // Also still implements the RELAY-generic relay::IMetricsProvider
+    // simultaneously (see dds.hpp's "Metrics providers" section on why
+    // this requires distinct method names in C++).
+    relay::IMetricsProvider* relay_mp = p.get();
+    CHECK(relay_mp != nullptr);
+    CHECK(relay_mp->metrics().write_count == 0);
+
+    CHECK(dynamic_cast<dds::mock::IMockParticipant*>(mp) != nullptr);
+    CHECK(dynamic_cast<dds::mock::IMockParticipant*>(dp) != nullptr);
+    CHECK(dynamic_cast<dds::mock::IMockParticipant*>(tp) != nullptr);
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────
