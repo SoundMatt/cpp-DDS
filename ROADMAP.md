@@ -581,10 +581,37 @@ it:
   (`safety/metrics.go`) is a separate, Tier-5-adjacent observability layer and is out
   of scope for this item, which covers the wire header plus
   CRC/sequence/freshness validation only.
-- **`security`** — HMAC-SHA-256 message authentication, AES-256-GCM encryption layer,
+- [x] **`security`** — HMAC-SHA-256 message authentication, AES-256-GCM encryption layer,
   topic ACL (per-participant/per-topic `Permission` bitfield), anti-replay sequence
   number enforcement (go-DDS `security/`, 639 LOC). Carried forward from the previous
   roadmap draft's v0.3.0 scope, now explicitly ordered as Tier 2 rather than Tier 3.
+  **Done (v0.18.0):** `dds::security::Plugin`/`NullPlugin`/`HMACPlugin`/`AESGCMPlugin`
+  (`include/dds/security/security.hpp`, `src/security/security.cpp`),
+  `dds::security::AccessPolicy` (`include/dds/security/access.hpp`,
+  `src/security/access.cpp`), and `dds::security::ReplayGuard`
+  (`include/dds/security/replay.hpp`, `src/security/replay.cpp`) — byte-exact
+  `HMACPlugin`/`AESGCMPlugin` wire formats (`plaintext || HMAC-SHA-256[32]` and
+  `nonce[12] || AES-256-GCM ciphertext || tag[16]` respectively) verified against
+  reference vectors independently derived from a fresh go-DDS clone (see
+  `tests/test_security_hmac.cpp`, `tests/test_security_aesgcm.cpp`), plus
+  independent FIPS/RFC/NIST known-answer cross-checks of the underlying
+  SHA-256/HMAC/AES-256/GCM primitives. No external crypto dependency is fetched
+  for this project (`cmake/FetchDeps.cmake` — Catch2 only), so SHA-256, HMAC,
+  AES-256, and GCM are implemented from scratch as an internal, non-public detail
+  under `src/security/crypto/`, verified byte-exact against Go's `crypto/aes` +
+  `crypto/cipher` + `crypto/hmac` stdlib output (which is what go-DDS's plugins
+  wrap) as well as the classic McGrew-Viega/NIST AES-256-GCM all-zero test
+  vector and RFC 4231 HMAC-SHA-256 test vectors. `AccessPolicy`'s glob matching
+  is a faithful byte-oriented port of Go's `path.Match` (behavioral parity, no
+  wire format — see `tests/test_security_access.cpp`); `ReplayGuard` is a
+  sliding-time-window anti-replay tracker (`tests/test_security_replay.cpp`).
+  go-DDS's `security.cert`/`security.discovery` (PKI-based mutual authentication
+  and DDS-discovery security wrapping, `security/cert.go` + `security/discovery.go`)
+  are separate surfaces beyond this item's stated scope and are out of scope here,
+  matching the `ddssafety`/E2E item's precedent of scoping out `safety/metrics.go`.
+  Scope: internal, additive — `dds::security::Plugin` is a standalone seal/open
+  library, not wired into `dds::adapt()`, `dds::mock`, or the RTPS transport,
+  matching `dds::safety::E2EPublisher`'s own precedent.
 
 ## Tier 3 — xtypes, tsn, idl, cdr (v0.4.0)
 
