@@ -16,19 +16,29 @@
 
 // fusa:req REQ-MOCK-001 REQ-MOCK-002 REQ-MOCK-003 REQ-MOCK-004 REQ-MOCK-005
 // fusa:req REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003
+// fusa:req REQ-METRICS-004 REQ-METRICS-005 REQ-METRICS-006
 // fusa:req REQ-HEALTH-001 REQ-HEALTH-002
 
 namespace dds::mock {
 
 // IMockParticipant extends IParticipant with the optional RELAY capability
-// interfaces: IMetricsProvider, IHealthProvider, and IDrainer. Callers can
-// use the concrete type directly without dynamic_cast.
-// fusa:req REQ-MOCK-001 REQ-METRICS-003 REQ-HEALTH-001
+// interfaces (relay::IMetricsProvider, relay::IHealthProvider,
+// relay::IDrainer — RELAY spec §9/§12.2) plus the DDS-package-scoped metrics
+// providers mirroring go-DDS's dds.go (dds::IMetricsProvider,
+// dds::IDiscoveryMetricsProvider, dds::ITopicMetricsProvider — see dds.hpp's
+// "Metrics providers" section for why the latter use `dds_metrics()` rather
+// than `metrics()`). Callers can use the concrete type directly without
+// dynamic_cast.
+// fusa:req REQ-MOCK-001 REQ-METRICS-003 REQ-METRICS-004 REQ-METRICS-005
+// fusa:req REQ-METRICS-006 REQ-HEALTH-001
 class IMockParticipant
     : public IParticipant
     , public relay::IMetricsProvider
     , public relay::IHealthProvider
     , public relay::IDrainer
+    , public IMetricsProvider
+    , public IDiscoveryMetricsProvider
+    , public ITopicMetricsProvider
 {
 public:
     virtual ~IMockParticipant() = default;

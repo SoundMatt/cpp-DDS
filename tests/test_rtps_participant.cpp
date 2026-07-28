@@ -548,3 +548,153 @@ TEST_CASE("A DATA submessage sent directly to a Participant's IPv6 data socket i
 
     p->close();
 }
+
+// ── dds::IMetricsProvider / IDiscoveryMetricsProvider / ITopicMetricsProvider ──
+// (DDS-package-scoped; mirrors go-DDS's dds.go — Tier-1-adjacent "Also
+// within ddscore" roadmap item, not a Tier-1 RTPS sub-phase)
+
+TEST_CASE("Participant implements the DDS-package-scoped metrics providers",
+          "[rtps][participant][REQ-METRICS-004][REQ-METRICS-005][REQ-METRICS-006]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    IMetricsProvider*          mp = p.get();
+    IDiscoveryMetricsProvider* dp = p.get();
+    ITopicMetricsProvider*     tp = p.get();
+    CHECK(mp != nullptr);
+    CHECK(dp != nullptr);
+    CHECK(tp != nullptr);
+
+    CHECK(dynamic_cast<Participant*>(mp) != nullptr);
+    CHECK(dynamic_cast<Participant*>(dp) != nullptr);
+    CHECK(dynamic_cast<Participant*>(tp) != nullptr);
+
+    p->close();
+}
+
+TEST_CASE("Participant::dds_metrics: write/deliver counts for same-process delivery",
+          "[rtps][participant][REQ-METRICS-004]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    auto m0 = p->dds_metrics();
+    CHECK(m0.write_count == 0);
+
+    auto [sub, sub_ec] = p->new_subscriber("MetricsTopic", default_qos());
+    REQUIRE_FALSE(sub_ec);
+    auto [pub, pub_ec] = p->new_publisher("MetricsTopic", default_qos());
+    REQUIRE_FALSE(pub_ec);
+
+    std::vector<uint8_t> payload{0x01, 0x02, 0x03};
+    CHECK_FALSE(pub->write(payload));
+
+    auto ch     = sub->channel();
+    auto sample = ch->recv_until(std::chrono::steady_clock::now() + 2s);
+    REQUIRE(sample.has_value());
+
+    auto m = p->dds_metrics();
+    CHECK(m.write_count     == 1);
+    CHECK(m.bytes_written   == 3);
+    CHECK(m.deliver_count   == 1);
+    CHECK(m.bytes_delivered == 3);
+    CHECK(m.drop_count      == 0);
+
+    p->close();
+}
+
+TEST_CASE("Participant::dds_metrics: drop_count tracks dropped samples",
+          "[rtps][participant][REQ-METRICS-004]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    // cap=1 channel with DropNewest (the default) so extras are dropped.
+    auto depth = relay::with_channel_depth(1);
+    auto [sub, sub_ec] = p->new_subscriber("DropTopic", default_qos(), {depth});
+    REQUIRE_FALSE(sub_ec);
+    auto [pub, pub_ec] = p->new_publisher("DropTopic", default_qos());
+    REQUIRE_FALSE(pub_ec);
+
+    CHECK_FALSE(pub->write(std::vector<uint8_t>{1})); // queued
+    CHECK_FALSE(pub->write(std::vector<uint8_t>{2})); // dropped (channel full)
+    CHECK_FALSE(pub->write(std::vector<uint8_t>{3})); // dropped
+
+    auto m = p->dds_metrics();
+    CHECK(m.write_count == 3);
+    CHECK(m.drop_count  == 2);
+
+    p->close();
+}
+
+TEST_CASE("Participant::discovery_metrics reports live SPDP announce counters",
+          "[rtps][participant][REQ-METRICS-005]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    // SpdpService::announce_loop sends its first announcement immediately
+    // on start() (see spdp.cpp); a short wait avoids a race against that
+    // background thread.
+    std::this_thread::sleep_for(100ms);
+
+    auto dm = p->discovery_metrics();
+    CHECK(dm.announces_sent >= 1);
+    CHECK(dm.peers_known    == 0); // no peers discovered in this test
+    CHECK(dm.peer_evictions == 0);
+
+    p->close();
+}
+
+TEST_CASE("Participant::topic_metrics: per-topic breakdown", "[rtps][participant][REQ-METRICS-006]") {
+    ParticipantOptions opts;
+    opts.test_mode = true;
+    auto [p, ec] = Participant::create(0, opts);
+    REQUIRE_FALSE(ec);
+
+    CHECK(p->topic_metrics().empty());
+
+    auto [subA, subA_ec] = p->new_subscriber("TopicMetA", default_qos());
+    REQUIRE_FALSE(subA_ec);
+    auto [pubA, pubA_ec] = p->new_publisher("TopicMetA", default_qos());
+    REQUIRE_FALSE(pubA_ec);
+    auto [pubB, pubB_ec] = p->new_publisher("TopicMetB", default_qos());
+    REQUIRE_FALSE(pubB_ec);
+
+    CHECK_FALSE(pubA->write(std::vector<uint8_t>{1, 2}));       // TopicMetA: 1 write, 1 deliver
+    CHECK_FALSE(pubB->write(std::vector<uint8_t>{1, 2, 3}));    // TopicMetB: 1 write, 0 delivers
+    CHECK_FALSE(pubB->write(std::vector<uint8_t>{4, 5, 6, 7})); // TopicMetB: 2 writes total
+
+    // Wait for the (synchronous) local dispatch of TopicMetA to be
+    // observable via the subscriber channel before reading counters.
+    auto ch     = subA->channel();
+    auto sample = ch->recv_until(std::chrono::steady_clock::now() + 2s);
+    REQUIRE(sample.has_value());
+
+    auto topics = p->topic_metrics();
+    REQUIRE(topics.size() == 2);
+
+    TopicMetrics a, b;
+    bool found_a = false, found_b = false;
+    for (auto& tm : topics) {
+        if (tm.topic == "TopicMetA") { a = tm; found_a = true; }
+        if (tm.topic == "TopicMetB") { b = tm; found_b = true; }
+    }
+    REQUIRE(found_a);
+    REQUIRE(found_b);
+
+    CHECK(a.write_count   == 1);
+    CHECK(a.bytes_written == 2);
+    CHECK(a.deliver_count == 1);
+
+    CHECK(b.write_count   == 2);
+    CHECK(b.bytes_written == 7); // 3 + 4
+    CHECK(b.deliver_count == 0); // no subscriber on TopicMetB
+
+    p->close();
+}

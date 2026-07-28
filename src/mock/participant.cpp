@@ -15,6 +15,7 @@
 
 // fusa:req REQ-MOCK-001 REQ-MOCK-002 REQ-MOCK-003 REQ-MOCK-004 REQ-MOCK-005
 // fusa:req REQ-METRICS-001 REQ-METRICS-002 REQ-METRICS-003
+// fusa:req REQ-METRICS-004 REQ-METRICS-005 REQ-METRICS-006
 // fusa:req REQ-HEALTH-001 REQ-HEALTH-002
 // fusa:req REQ-DDS-010 REQ-SEC-004 REQ-SEC-005 REQ-LIFECYCLE-001 REQ-LIFECYCLE-002
 // fusa:req REQ-LIFECYCLE-003 REQ-LIFECYCLE-004 REQ-LIFECYCLE-005
@@ -39,6 +40,23 @@ struct ParticipantCounters {
     std::atomic<uint64_t> drop_count{0};
     std::atomic<uint64_t> bytes_delivered{0};
     std::atomic<uint64_t> error_count{0};
+};
+
+// Per-topic breakdown of the same counters, keyed by topic name within a
+// single participant (dds::ITopicMetricsProvider, go-DDS:
+// mock.mockTopicCounter). Scoped per-participant to match ParticipantCounters
+// above — go-DDS's mock keeps a single topic-counter table on the
+// process-global broker instead (shared identically by every participant
+// sharing it), but cpp-DDS's mock already gives each participant its own
+// aggregate ParticipantCounters rather than a shared one, so per-topic
+// counters follow the same already-established scope for consistency.
+// fusa:req REQ-METRICS-006
+struct TopicCounters {
+    std::atomic<uint64_t> write_count{0};
+    std::atomic<uint64_t> bytes_written{0};
+    std::atomic<uint64_t> deliver_count{0};
+    std::atomic<uint64_t> drop_count{0};
+    std::atomic<uint64_t> bytes_delivered{0};
 };
 
 // ── Broker ────────────────────────────────────────────────────────────────────
@@ -167,13 +185,15 @@ public:
     MockPublisher(std::string topic, QoS qos, Broker& broker,
                   std::atomic<bool>& participant_closed,
                   std::atomic<uint64_t>& seq,
-                  std::shared_ptr<ParticipantCounters> ctrs)
+                  std::shared_ptr<ParticipantCounters> ctrs,
+                  std::shared_ptr<TopicCounters> topic_ctrs)
         : topic_(std::move(topic))
         , qos_(std::move(qos))
         , broker_(broker)
         , participant_closed_(participant_closed)
         , seq_(seq)
         , ctrs_(std::move(ctrs))
+        , topic_ctrs_(std::move(topic_ctrs))
     {}
 
     std::error_code write(const std::vector<uint8_t>& payload) override {
@@ -208,6 +228,13 @@ public:
         ctrs_->drop_count      += static_cast<uint64_t>(stats.dropped);
         ctrs_->bytes_delivered += static_cast<uint64_t>(stats.bytes)
                                   * static_cast<uint64_t>(stats.delivered);
+
+        topic_ctrs_->write_count++;
+        topic_ctrs_->bytes_written   += payload.size();
+        topic_ctrs_->deliver_count   += static_cast<uint64_t>(stats.delivered);
+        topic_ctrs_->drop_count      += static_cast<uint64_t>(stats.dropped);
+        topic_ctrs_->bytes_delivered += static_cast<uint64_t>(stats.bytes)
+                                         * static_cast<uint64_t>(stats.delivered);
         return {};
     }
 
@@ -223,6 +250,7 @@ private:
     std::atomic<bool>&                    participant_closed_;
     std::atomic<uint64_t>&                seq_;
     std::shared_ptr<ParticipantCounters>  ctrs_;
+    std::shared_ptr<TopicCounters>        topic_ctrs_;
     std::atomic<bool>                     closed_{false};
 };
 
@@ -289,7 +317,7 @@ public:
         if (topic.empty())  return {nullptr, ErrTopicEmpty()};
 
         auto pub = std::make_shared<MockPublisher>(
-            topic, qos, broker_, closed_, seq_, ctrs_);
+            topic, qos, broker_, closed_, seq_, ctrs_, topic_counters_for(topic));
         return {pub, {}};
     }
 
@@ -385,7 +413,65 @@ public:
         return ErrTimeout();
     }
 
+    // ── dds::IMetricsProvider (DDS-package-scoped; mirrors go-DDS's
+    // dds.MetricsProvider) ──────────────────────────────────────────────────
+
+    // fusa:req REQ-METRICS-004
+    dds::Metrics dds_metrics() const override {
+        dds::Metrics m;
+        m.write_count     = ctrs_->write_count.load();
+        m.bytes_written   = ctrs_->bytes_written.load();
+        m.deliver_count   = ctrs_->deliver_count.load();
+        m.drop_count      = ctrs_->drop_count.load();
+        m.bytes_delivered = ctrs_->bytes_delivered.load();
+        m.error_count     = ctrs_->error_count.load();
+        return m;
+    }
+
+    // ── dds::IDiscoveryMetricsProvider ──────────────────────────────────────
+
+    // The mock has no real network discovery; always returns zero values,
+    // matching go-DDS's mock.participant.DiscoveryMetrics doc comment
+    // verbatim ("The mock has no real network discovery; this always
+    // returns zero values").
+    // fusa:req REQ-METRICS-005
+    dds::DiscoveryMetrics discovery_metrics() const override {
+        return dds::DiscoveryMetrics{};
+    }
+
+    // ── dds::ITopicMetricsProvider ────────────────────────────────────────
+
+    // fusa:req REQ-METRICS-006
+    std::vector<dds::TopicMetrics> topic_metrics() const override {
+        std::vector<dds::TopicMetrics> result;
+        std::lock_guard<std::mutex> lk(topic_ctrs_mu_);
+        result.reserve(topic_ctrs_.size());
+        for (auto& [topic, tc] : topic_ctrs_) {
+            dds::TopicMetrics tm;
+            tm.topic           = topic;
+            tm.write_count     = tc->write_count.load();
+            tm.deliver_count   = tc->deliver_count.load();
+            tm.drop_count      = tc->drop_count.load();
+            tm.bytes_written   = tc->bytes_written.load();
+            tm.bytes_delivered = tc->bytes_delivered.load();
+            result.push_back(std::move(tm));
+        }
+        return result;
+    }
+
 private:
+    // topic_counters_for returns (creating on first access) the per-topic
+    // counter block for topic, scoped to this participant. Matches go-DDS's
+    // broker.topicCounterFor / participant.topicCounterFor (rtps side).
+    std::shared_ptr<TopicCounters> topic_counters_for(const std::string& topic) {
+        std::lock_guard<std::mutex> lk(topic_ctrs_mu_);
+        auto it = topic_ctrs_.find(topic);
+        if (it != topic_ctrs_.end()) return it->second;
+        auto tc = std::make_shared<TopicCounters>();
+        topic_ctrs_.emplace(topic, tc);
+        return tc;
+    }
+
     Domain                                       domain_;
     Broker&                                      broker_;
     std::shared_ptr<ParticipantCounters>         ctrs_;
@@ -394,6 +480,9 @@ private:
 
     mutable std::mutex                           sub_mu_;
     std::vector<std::weak_ptr<dds::Chan<Sample>>> sub_channels_;
+
+    mutable std::mutex                                              topic_ctrs_mu_;
+    std::unordered_map<std::string, std::shared_ptr<TopicCounters>> topic_ctrs_;
 };
 
 // ── Factory ───────────────────────────────────────────────────────────────────

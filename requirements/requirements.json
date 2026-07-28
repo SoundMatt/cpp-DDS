@@ -155,6 +155,30 @@
     "standards": ["RELAY spec §9.1"]
   },
   {
+    "id": "REQ-METRICS-004",
+    "title": "dds::IMetricsProvider interface",
+    "text": "Both dds::mock and dds::rtps::Participant shall implement dds::IMetricsProvider — the DDS-package-scoped counterpart to relay::IMetricsProvider mirroring go-DDS's dds.MetricsProvider (dds.go) — exposing an atomic snapshot of write/deliver/drop counts and byte totals via dds_metrics() with no side effects.",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["go-DDS dds.go MetricsProvider"]
+  },
+  {
+    "id": "REQ-METRICS-005",
+    "title": "dds::IDiscoveryMetricsProvider interface",
+    "text": "Both dds::mock and dds::rtps::Participant shall implement dds::IDiscoveryMetricsProvider, mirroring go-DDS's dds.DiscoveryMetricsProvider (dds.go). The mock has no real network discovery and shall always return zero-valued DiscoveryMetrics; dds::rtps::Participant shall report live SPDP/SEDP counters (announces sent/received, known peers, peer evictions, endpoint matches).",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["go-DDS dds.go DiscoveryMetricsProvider"]
+  },
+  {
+    "id": "REQ-METRICS-006",
+    "title": "dds::ITopicMetricsProvider interface",
+    "text": "Both dds::mock and dds::rtps::Participant shall implement dds::ITopicMetricsProvider, mirroring go-DDS's dds.TopicMetricsProvider (dds.go), exposing topic_metrics() as a per-topic breakdown (write/deliver/drop counts and byte totals) of the aggregate dds::Metrics counters.",
+    "category": "observability",
+    "criticality": "medium",
+    "standards": ["go-DDS dds.go TopicMetricsProvider"]
+  },
+  {
     "id": "REQ-HEALTH-001",
     "title": "IHealthProvider — healthy status",
     "text": "The mock participant shall implement relay::IHealthProvider, returning HealthStatus::OK while active.",

@@ -463,10 +463,39 @@ Also within `ddscore` but not RTPS-specific, carried forward from the previous r
 draft and small enough to slot in opportunistically alongside Tier 1 rather than blocking
 it:
 
-- [ ] `IMetricsProvider` / `IDiscoveryMetricsProvider` / `ITopicMetricsProvider`
+- [x] `IMetricsProvider` / `IDiscoveryMetricsProvider` / `ITopicMetricsProvider`
       implementation on mock and RTPS participants (go-DDS: these interfaces live in the
       core `dds` package, `dds.go`, implemented by `mock`, `rtps`, and exported by
-      `monitor`/`admin` — Tier 5)
+      `monitor`/`admin` — Tier 5). **Done:** `dds::IMetricsProvider` / `dds::Metrics`,
+      `dds::IDiscoveryMetricsProvider` / `dds::DiscoveryMetrics`, and
+      `dds::ITopicMetricsProvider` / `dds::TopicMetrics` added to `dds.hpp`, mirroring
+      go-DDS's `dds.go` field-for-field. Implemented by `dds::mock::IMockParticipant`
+      (aggregate counters already tracked for `relay::IMetricsProvider` reused verbatim;
+      `discovery_metrics()` always returns zero values — no real network discovery,
+      matching go-DDS's mock doc comment verbatim; new per-topic counter table added for
+      `topic_metrics()`) and `dds::rtps::Participant` (new participant-level aggregate
+      atomics incremented in `Writer::write()`/`Participant::dispatch()`, mirroring
+      go-DDS's `rtpsWriter.Write`/`participant.deliverToReader` counter split exactly;
+      `discovery_metrics()` reports live `SpdpService`/`SedpService` counters that were
+      already tracked and exposed since phases 4-5 — `announces_sent()`,
+      `announces_received()`, `peers()`, `peer_evictions()`, `endpoint_matches()` — this
+      phase just surfaces them through the new interface; new per-topic counter table
+      keyed by reader topic, matching go-DDS's `topicCounterFor`). Because C++ virtual
+      dispatch (unlike Go's structural interface satisfaction) cannot have two unrelated
+      base classes both declare a `metrics()` method with different return types on the
+      same derived class, and `dds::mock::IMockParticipant` already implements
+      `relay::IMetricsProvider::metrics()` (RELAY spec §9.1, added in v1.13), the new
+      DDS-package-scoped accessor is named `dds_metrics()` instead — see dds.hpp's
+      "Metrics providers" section for the full rationale.
+      `discovery_metrics()`/`topic_metrics()` have no RELAY-generic counterpart and keep
+      the direct go-DDS names. 10 new tests (`tests/test_mock.cpp`,
+      `tests/test_rtps_participant.cpp`) cover the interface hierarchy on both
+      participants plus write/deliver/drop/byte counting, per-topic breakdown, and (RTPS)
+      live discovery counters; verified locally with Release C++17 and a Debug ASan/UBSan
+      pass (297/297 tests), 0 warnings under `-Wall -Wextra -Wpedantic`. Internal/additive
+      only — not yet wired into `dds::adapt()`'s `relay::INode` bridge or the `cpp-dds`
+      CLI's `optional_interfaces` capabilities list; that consumption/export layer is
+      go-DDS's `monitor`/`admin` equivalent (Tier 5, still deferred).
 - [ ] `IHealthProvider` reporting participant and transport health (same source)
 - [ ] `IDrainer::close_with_drain()` on mock participant
 - [ ] `ILoaningPublisher` (zero-copy loan/commit) backed by a pool allocator;

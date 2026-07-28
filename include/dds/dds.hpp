@@ -305,6 +305,94 @@ public:
     virtual void return_loan(std::vector<uint8_t>* buf) = 0;
 };
 
+// ── Metrics providers (DDS-package-scoped; mirrors go-DDS's dds.go) ────────────
+//
+// go-DDS's core `dds` package (dds.go) declares MetricsProvider,
+// DiscoveryMetricsProvider, and TopicMetricsProvider distinct from the
+// RELAY-generic relay.MetricsProvider (§12.2 capabilities): the latter is a
+// single flat counter set any RELAY node may optionally expose, while these
+// three give DDS-specific breakdowns (discovery-layer counters, per-topic
+// counters) with no RELAY-level equivalent — both `mock` and `rtps`
+// implement all three in go-DDS, and `monitor`/`admin` (Tier 5,
+// out of scope here) consume them for observability export.
+//
+// In Go, one identically-named `Metrics()` method can satisfy both
+// dds.MetricsProvider and relay.MetricsProvider simultaneously because Go
+// interface satisfaction is structural. C++ virtual dispatch is not: a class
+// that already implements relay::IMetricsProvider's `metrics()` (relay.hpp)
+// cannot also override an unrelated base's `metrics()` under the same name
+// with a different return type. `dds_metrics()` below is named to avoid that
+// collision on dds::mock::IMockParticipant, which already implements
+// relay::IMetricsProvider (RELAY spec §9.1). discovery_metrics()/
+// topic_metrics() have no RELAY-generic counterpart and keep the direct
+// go-DDS names.
+//
+// Internal/additive: not yet wired into dds::adapt()'s relay::INode bridge
+// or the cpp-dds CLI's `optional_interfaces` capabilities list — that
+// consumption/export layer is go-DDS's `monitor`/`admin` equivalent
+// (Tier 5, deferred per ROADMAP.md).
+
+// fusa:req REQ-METRICS-004
+struct Metrics {
+    uint64_t write_count{};
+    uint64_t deliver_count{};
+    uint64_t drop_count{};
+    uint64_t bytes_written{};
+    uint64_t bytes_delivered{};
+    uint64_t error_count{};
+};
+
+// IMetricsProvider is implemented by participants that expose runtime
+// statistics (go-DDS: dds.MetricsProvider).
+// fusa:req REQ-METRICS-004
+class IMetricsProvider {
+public:
+    virtual ~IMetricsProvider() = default;
+    virtual Metrics dds_metrics() const = 0;
+};
+
+// DiscoveryMetrics holds cumulative discovery statistics for a participant
+// (go-DDS: dds.DiscoveryMetrics).
+// fusa:req REQ-METRICS-005
+struct DiscoveryMetrics {
+    uint64_t announces_sent{};     // SPDP announcements sent
+    uint64_t announces_received{}; // SPDP announcements received from remote peers
+    uint64_t peers_known{};        // current number of known remote participants
+    uint64_t peer_evictions{};     // cumulative peers evicted due to lease expiry
+    uint64_t endpoint_matches{};   // cumulative topic endpoint matches (local<->remote)
+};
+
+// IDiscoveryMetricsProvider is implemented by participants that expose
+// discovery-layer statistics (go-DDS: dds.DiscoveryMetricsProvider).
+// fusa:req REQ-METRICS-005
+class IDiscoveryMetricsProvider {
+public:
+    virtual ~IDiscoveryMetricsProvider() = default;
+    virtual DiscoveryMetrics discovery_metrics() const = 0;
+};
+
+// TopicMetrics holds per-topic statistics for a single DDS topic
+// (go-DDS: dds.TopicMetrics).
+// fusa:req REQ-METRICS-006
+struct TopicMetrics {
+    std::string topic;
+    uint64_t    write_count{};
+    uint64_t    deliver_count{};
+    uint64_t    drop_count{};
+    uint64_t    bytes_written{};
+    uint64_t    bytes_delivered{};
+};
+
+// ITopicMetricsProvider is implemented by participants that expose per-topic
+// statistics (go-DDS: dds.TopicMetricsProvider). The returned vector
+// contains one entry per observed topic.
+// fusa:req REQ-METRICS-006
+class ITopicMetricsProvider {
+public:
+    virtual ~ITopicMetricsProvider() = default;
+    virtual std::vector<TopicMetrics> topic_metrics() const = 0;
+};
+
 // ── adapt ─────────────────────────────────────────────────────────────────────
 
 // adapt wraps a participant as a relay::INode for cross-protocol routing.
