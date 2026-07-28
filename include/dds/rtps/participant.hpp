@@ -26,8 +26,13 @@
 // payload exceeds fragment.hpp's kMaxFragmentPayload are now split into
 // DATA_FRAG submessages on send and reassembled on receive (Tier-1 phase 8,
 // "Fragmentation" — see fragment.hpp's own file-level scope note for the
-// full detail, including the write/retransmit/receive wiring). Still out of
-// scope: no loan integration (phase 9), no IPv6 (phase 10), no
+// full detail, including the write/retransmit/receive wiring).
+// dds::rtps::new_loaning_publisher (rtps/loan.hpp) wraps a Writer with a
+// dds::pool::BytePool for zero-copy loaned-sample publishing (Tier-1
+// phase 9, "Loan integration") — its LoaningWriter implementation lives in
+// this file's .cpp (participant.cpp), the one place the .cpp-local Writer
+// type is visible; see loan.hpp's own file-level scope note. Still out of
+// scope: no IPv6 (phase 10), no
 // security/TSN (Tier 2/3), no INFO_TS-carried publish
 // timestamps (Sample::timestamp is always the local wall-clock time of
 // publish/receipt — every wire primitive this phase composes — DataSubmessage,
