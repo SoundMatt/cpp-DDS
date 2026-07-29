@@ -18,7 +18,8 @@ RELAY spec v1.11 conformant.
 | `src/relay.cpp` | relay error category, to_string, parse_protocol |
 | `src/dds.cpp` | DDS error category, Sample::to_message, from_message, adapt() |
 | `src/mock/participant.cpp` | Broker, MockPublisher, MockSubscriber, MockParticipant |
-| `cli/main.cpp` | `cpp-dds` CLI — version / capabilities / status / conform / convert |
+| `cli/cpp_dds_cli.hpp`, `cli/cpp_dds_cli.cpp` | `cpp-dds` CLI dispatch + subcommands (version / capabilities / status / conform / convert), factored out of `main.cpp` so `tests/test_cpp_dds_cli.cpp` can exercise it in-process (mirrors `ddstool/cli.hpp`) |
+| `cli/main.cpp` | `cpp-dds` CLI entry point — thin wrapper around `cli::dispatch()` |
 | `cli/json_lite.hpp`, `cli/base64.hpp` | CLI-only JSON + base64 codec used by `convert` (§11.2) |
 | `requirements/requirements.json` | Machine-readable requirements (REQ-DDS-xxx, REQ-MOCK-xxx) |
 | `HARA.md` / `.fusa-hara.json` | Hazard analysis and risk assessment (§20.4) |
