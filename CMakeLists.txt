@@ -102,6 +102,16 @@ endif()
 #    ddstool/CMakeLists.txt.
 add_subdirectory(ddstool)
 
+# ── cpp-dds RELAY conformance CLI library (distinct from `ddstool` above).
+#    Unconditional and ahead of tests/ below for the same reason as
+#    `ddstool_cli`: `cpp_dds_cli` is a small static library (cli.cpp) that
+#    both the `cpp-dds` executable and tests/test_cpp_dds_cli.cpp link
+#    against, so tests can exercise the real subcommand-dispatch/exit-code
+#    behavior in-process rather than only via a subprocess spawn. The
+#    `cpp-dds` *executable* target itself remains separately opt-out via
+#    CPPDDS_BUILD_CLI — see cli/CMakeLists.txt.
+add_subdirectory(cli)
+
 # ── cppdds_bridges (Tier 4 — bridges; ROADMAP.md's proposed `ddsbridges`
 #    target group, first materialized here since Tier 4 is the first tier
 #    with any bridge/ code to put in it — see ROADMAP.md's "Target
@@ -148,13 +158,6 @@ option(CPPDDS_INTEROP_TESTS
 if(CPPDDS_INTEROP_TESTS)
     enable_testing()
     add_subdirectory(interop)
-endif()
-
-# ── CLI binary ────────────────────────────────────────────────────────────────
-
-option(CPPDDS_BUILD_CLI "Build RELAY convert CLI" ON)
-if(CPPDDS_BUILD_CLI)
-    add_subdirectory(cli)
 endif()
 
 message(STATUS "cpp-DDS v${PROJECT_VERSION} — C++${CMAKE_CXX_STANDARD} / ${CMAKE_BUILD_TYPE}")

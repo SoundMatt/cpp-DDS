@@ -313,14 +313,20 @@ jobs:
         run: ../cpp-FuSa/build/cpfusa lint --dir .
 
       # §20.1 item 2 requires traceability at 100% (every requirement traced
-      # AND tested). This repo is currently at 100% annotated / 96%+ tested
-      # against the real registry loaded above (see #43); --req-coverage /
-      # --sec-tested gate on that for real instead of the previous no-op
+      # AND tested) against the real registry loaded above (see #43).
+      # REQ-CLI-001/2/3 and REQ-SAFETY-004 (the four requirements previously
+      # holding this at 96.7% tested — see #52) are now closed: cli/ was
+      # split into a testable cpp_dds_cli library (tests/test_cpp_dds_cli.cpp
+      # exercises version/conform/convert in-process, mirroring ddstool_cli's
+      # precedent) and REQ-SAFETY-004's self-referential registry-integrity
+      # property has a stand-in unit test
+      # (tests/test_requirements_registry.cpp). --req-coverage / --sec-tested
+      # gate on the real, now-100%, numbers instead of the previous no-op
       # (which always "passed" against an empty, freshly-initialised
       # registry regardless of actual coverage).
       - name: cpfusa trace (requirements traceability)
         working-directory: cpp-DDS
-        run: ../cpp-FuSa/build/cpfusa trace --dir . --req-coverage 100 --sec-tested 96
+        run: ../cpp-FuSa/build/cpfusa trace --dir . --req-coverage 100 --sec-tested 100
 
       # §20.1 item 2 requires the full x-FuSa lifecycle, not a subset: standard
       # check + traceability (above) plus cybersecurity analysis, dependency

@@ -24,6 +24,8 @@ add_executable(cppdds_tests
     test_cdr.cpp
     test_idl.cpp
     test_ddstool_cli.cpp
+    test_cpp_dds_cli.cpp
+    test_requirements_registry.cpp
     idl_roundtrip/test_idl_roundtrip.cpp
     test_tsn.cpp
     test_taprio.cpp
@@ -41,6 +43,7 @@ target_link_libraries(cppdds_tests
     PRIVATE
         cppdds_lib
         ddstool_cli
+        cpp_dds_cli
         Catch2::Catch2WithMain
 )
 
@@ -52,7 +55,18 @@ target_include_directories(cppdds_tests
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../include
         ${CMAKE_CURRENT_SOURCE_DIR}/../ddstool
+        ${CMAKE_CURRENT_SOURCE_DIR}/../cli
         ${CMAKE_CURRENT_SOURCE_DIR}/idl_roundtrip
+)
+
+# REQ-SAFETY-004 ("the requirements registry stays traced") has no natural
+# unit-testable behavior of its own — its real verification IS the
+# fusa-asil-b CI gate (cpfusa trace), not a Catch2 assertion. As a stand-in
+# fusa:test (see test_requirements_registry.cpp), give that test the real
+# registry's absolute path so it can assert the file itself stays
+# well-formed/non-empty regardless of ctest's working directory.
+target_compile_definitions(cppdds_tests PRIVATE
+    CPPDDS_REQUIREMENTS_JSON="${CMAKE_CURRENT_SOURCE_DIR}/../requirements/requirements.json"
 )
 
 include(CTest)
