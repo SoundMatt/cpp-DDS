@@ -369,6 +369,35 @@ TEST_CASE("FragmentAssembler returns nullopt until every fragment has arrived", 
     CHECK(fa.receive(sample_writer_guid(), frags.back()).has_value());
 }
 
+TEST_CASE("FragmentAssembler does not complete reassembly on a duplicate fragment, and still "
+          "completes once the genuinely missing fragment arrives",
+          "[rtps][fragment]") {
+    // Regression test: a retransmitted/duplicate DATA_FRAG for an index
+    // that already arrived must not be counted a second time toward
+    // completion. Before this fix, resending frags[0] in place of the
+    // still-missing frags[3] made `received >= total` true early, and the
+    // assembler handed back a payload with frags[3]'s byte range still
+    // zero-filled instead of ever actually receiving it.
+    auto wrapped = hex_to_bytes(kCdrWrappedHex);
+    auto frags   = split_into_fragments_n(sample_writer_entity(), SequenceNumber{0, 42}, wrapped, 5);
+    REQUIRE(frags.size() == 4);
+
+    FragmentAssembler fa;
+    CHECK_FALSE(fa.receive(sample_writer_guid(), frags[0]).has_value());
+    CHECK_FALSE(fa.receive(sample_writer_guid(), frags[1]).has_value());
+    CHECK_FALSE(fa.receive(sample_writer_guid(), frags[2]).has_value());
+
+    // Duplicate of an already-received fragment (frags[0] again) must not
+    // fake completion — frags[3] never arrived.
+    CHECK_FALSE(fa.receive(sample_writer_guid(), frags[0]).has_value());
+
+    // The genuinely missing fragment now arrives and completion succeeds
+    // with fully correct data (not zero-filled in frags[3]'s range).
+    auto result = fa.receive(sample_writer_guid(), frags[3]);
+    REQUIRE(result.has_value());
+    CHECK(*result == wrapped);
+}
+
 TEST_CASE("FragmentAssembler rejects a fragment claiming an implausibly large DataSize", "[rtps][fragment]") {
     DataFrag f;
     f.writer_entity_id      = sample_writer_entity();

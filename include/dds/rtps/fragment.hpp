@@ -157,7 +157,18 @@ public:
             buf.data.assign(f.data_size, uint8_t{0});
             buf.total   = total;
             buf.created = now;
-            it          = buffers_.emplace(key, std::move(buf)).first;
+            // received_mask tracks which 0-based fragment indices have
+            // actually been written, so a retransmitted/duplicate fragment
+            // cannot be counted twice toward `received` (see this method's
+            // doc comment: a duplicate satisfying `received >= total`
+            // without every index having genuinely arrived would deliver
+            // zero-filled data for whichever index was actually lost —
+            // this is a strict correctness fix over go-DDS's fragment.go,
+            // which has the same latent bare-counter bug but never wires
+            // fragmentAssembler into its receive path, so it never
+            // exercises it; see this header's file-level scope note).
+            buf.received_mask.assign(total, false);
+            it = buffers_.emplace(key, std::move(buf)).first;
         }
         Buffer& buf = it->second;
 
@@ -170,7 +181,8 @@ public:
         // behavior exactly rather than adding a guard go-DDS doesn't have).
         const uint32_t frag_idx = f.fragment_starting_num - 1; // convert to 0-based
         for (uint16_t i = 0; i < f.fragments_in_submsg; ++i) {
-            const uint32_t offset = (frag_idx + i) * static_cast<uint32_t>(f.fragment_size);
+            const uint32_t idx    = frag_idx + i;
+            const uint32_t offset = idx * static_cast<uint32_t>(f.fragment_size);
             if (offset >= f.data_size) break;
             uint32_t frag_start = static_cast<uint32_t>(i) * static_cast<uint32_t>(f.fragment_size);
             uint32_t frag_end   = frag_start + f.fragment_size;
@@ -180,7 +192,15 @@ public:
             if (frag_start < frag_end && offset < end) {
                 std::copy(f.payload.begin() + frag_start, f.payload.begin() + frag_end, buf.data.begin() + offset);
             }
-            ++buf.received;
+            // Only count this index toward completion the first time it is
+            // genuinely written. `idx` is always < buf.total here: offset
+            // (== idx * fragment_size) already passed the `offset >=
+            // f.data_size` guard above, and total == ceil(data_size /
+            // fragment_size), so idx < total is guaranteed.
+            if (!buf.received_mask[idx]) {
+                buf.received_mask[idx] = true;
+                ++buf.received;
+            }
         }
 
         if (buf.received >= buf.total) {
@@ -218,7 +238,8 @@ private:
     };
     struct Buffer {
         std::vector<uint8_t>                 data;
-        uint32_t                              received{0};
+        std::vector<bool>                     received_mask; // per-fragment-index arrival, sized to `total`
+        uint32_t                              received{0};   // count of *distinct* indices received so far
         uint32_t                              total{0};
         std::chrono::steady_clock::time_point created{};
     };
