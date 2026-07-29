@@ -931,6 +931,40 @@ ASan+UBSan clean. `ROADMAP.md` checked off.
 - CI: new `release.yml` workflow attaches an SBOM and build provenance
   (`cpfusa release`) to every `v*` release tag (§20.5 supply-chain integrity).
 
+## [0.1.2] — 2026-06-19
+
+### Fixed
+
+- `INode::close()` marked `noexcept` per RELAY spec §18.2 line 1968;
+  `NodeAdapter::close()` updated to match.
+- `DdsErrorCategory::equivalent()` extended with three missing sentinel
+  mappings (spec §5.3): `sample_rejected` → `relay::Errc::payload_too_large`,
+  `resource_limits` → `relay::Errc::payload_too_large`, `loan_buffer` →
+  `relay::Errc::closed`.
+- `ILoaningPublisher` removed from the CLI's `optional_interfaces`; the mock
+  transport does not provide an implementation, so advertising it violated
+  spec §12.2's honesty requirement.
+
+## [0.1.1] — 2026-06-19
+
+### Changed
+
+- `kRelaySpecVersion` bumped from `"1.7"` to `"1.10"` in both the `relay`
+  and `dds` namespaces; legacy `kSpecVersion` alias preserved for
+  compatibility.
+- `relay::INode::send()` and `ICaller::call()` now take `Context` as their
+  first argument, matching the C++ binding in spec §18.2. `NodeAdapter`
+  propagates the deadline through to `pub->write(ctx, ...)`.
+- `"loaning"` removed from the CLI's `capabilities` `features` list:
+  `ILoaningPublisher` is mock-transport-only, not a general capability.
+
+### Added
+
+- `DdsErrorCategory::equivalent()` (spec §5.2): maps `topic_empty` and
+  `qos_mismatch` to `relay::Errc::not_connected`, `deadline_missed` to
+  `relay::Errc::timeout`, and `domain_out_of_range` to
+  `relay::Errc::not_connected`.
+
 ## [0.1.0] — 2026-06-19
 
 ### Added
