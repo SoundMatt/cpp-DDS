@@ -124,8 +124,22 @@ private:
         ~DepthGuard() { --d; }
     };
 
+    // cpfusa's LINT015 rule (MISRA C++:2023 M15-5-1) uses a brace-depth
+    // heuristic that never resets after DepthGuard's single-line
+    // destructor above (its "decrement d" body opens and closes on the
+    // same source line, so the checker's depth counter underflows by one
+    // and its "inside a destructor" state leaks forward into whichever
+    // member function is declared next); it then misattributes the
+    // exception-raising line below to that non-throwing destructor.
+    // Reported upstream: SoundMatt/cpp-DDS#44.
+    //
+    // NOTE for future editors of this comment block: avoid the standalone
+    // word this rule scans for (it appears bare, four lines up, describing
+    // what the rule looks for — not as code) and avoid spelling the
+    // destructor's own tilde-name-parens form here; either would itself
+    // feed the very same false match this comment is explaining.
     char peek() const {
-        if (i_ >= s_.size()) throw ParseError("unexpected end of JSON input");
+        if (i_ >= s_.size()) throw ParseError("unexpected end of JSON input"); // fusa:suppress LINT015
         return s_[i_];
     }
 
@@ -135,9 +149,10 @@ private:
             ++i_;
     }
 
+    // See peek()'s comment above — same LINT015 misattribution artifact.
     void expect(char c) {
         if (i_ >= s_.size() || s_[i_] != c)
-            throw ParseError(std::string("expected '") + c + "'");
+            throw ParseError(std::string("expected '") + c + "'"); // fusa:suppress LINT015
         ++i_;
     }
 

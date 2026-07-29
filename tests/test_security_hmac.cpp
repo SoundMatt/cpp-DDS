@@ -248,6 +248,7 @@ TEST_CASE("new_random_key produces distinct output across calls", "[security][RE
 
 // ── NullPlugin ────────────────────────────────────────────────────────────────
 
+// fusa:test REQ-SECURITY-002
 TEST_CASE("NullPlugin is the identity transform", "[security][REQ-SECURITY-002]") {
     NullPlugin p;
     auto in              = str_bytes("test");

@@ -246,7 +246,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: SoundMatt/cpp-FuSa
-          ref: v0.15.0
+          ref: v0.17.1
           path: cpp-FuSa
 
       - name: Install tools
@@ -264,17 +264,63 @@ jobs:
         working-directory: cpp-DDS
         run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.5.0 --force || true
 
+      # cpfusa init's default .fusa.json only scans src/ and include/ (§1.2.1
+      # sourceDirs), and always writes a fresh, empty .fusa-reqs.json — never
+      # this repo's real requirements/requirements.json (123 requirements).
+      # Left as-is, §20.1's traceability gate below would silently measure
+      # zero requirements every run (see #43). Widen sourceDirs to the
+      # project's actual source layout (cli/ and ddstool/ carry real
+      # //fusa:req annotations too — see CLAUDE.md's file table — and
+      # tests/ carries every //fusa:test annotation) and convert the real
+      # registry into the schema cpfusa's trace command loads.
+      - name: Load real requirements registry + widen source scan (§20.1)
+        working-directory: cpp-DDS
+        run: |
+          python3 - <<'PY'
+          import json
+
+          with open(".fusa.json") as f:
+              cfg = json.load(f)
+          cfg["sourceDirs"] = ["src", "include", "cli", "ddstool", "tests"]
+          with open(".fusa.json", "w") as f:
+              json.dump(cfg, f, indent=2)
+
+          with open("requirements/requirements.json") as f:
+              reqs = json.load(f)
+          out = [{
+              "id": r["id"],
+              "title": r["title"],
+              "description": r["text"],
+              "standard_ref": "; ".join(r.get("standards", [])),
+              "severity": "cybersecurity" if r.get("category") == "security" else "safety",
+          } for r in reqs]
+          with open(".fusa-reqs.json", "w") as f:
+              json.dump({"requirements": out}, f, indent=2)
+          print(f"Loaded {len(out)} requirements into .fusa-reqs.json")
+          PY
+
       - name: cpfusa check
         working-directory: cpp-DDS
         run: ../cpp-FuSa/build/cpfusa check --dir .
 
+      # No `|| true`: LINT015 previously flagged two false positives here
+      # (cli/json_lite.hpp:128,140 — see fusa:suppress comments at those
+      # lines and #44) which is why this step was masked; with those
+      # dispositioned via cpfusa's own per-line suppression mechanism, an
+      # ERROR-level finding anywhere else now genuinely fails the build.
       - name: cpfusa lint
         working-directory: cpp-DDS
-        run: ../cpp-FuSa/build/cpfusa lint --dir . || true
+        run: ../cpp-FuSa/build/cpfusa lint --dir .
 
+      # §20.1 item 2 requires traceability at 100% (every requirement traced
+      # AND tested). This repo is currently at 100% annotated / 96%+ tested
+      # against the real registry loaded above (see #43); --req-coverage /
+      # --sec-tested gate on that for real instead of the previous no-op
+      # (which always "passed" against an empty, freshly-initialised
+      # registry regardless of actual coverage).
       - name: cpfusa trace (requirements traceability)
         working-directory: cpp-DDS
-        run: ../cpp-FuSa/build/cpfusa trace --dir .
+        run: ../cpp-FuSa/build/cpfusa trace --dir . --req-coverage 100 --sec-tested 96
 
       # §20.1 item 2 requires the full x-FuSa lifecycle, not a subset: standard
       # check + traceability (above) plus cybersecurity analysis, dependency
@@ -331,7 +377,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: SoundMatt/cpp-FuSa
-          ref: v0.15.0
+          ref: v0.17.1
           path: cpp-FuSa
 
       - name: Install tools

@@ -31,7 +31,8 @@
 namespace dds::bridge::grpc {
 
 // Server accepts TCP connections on `bind_addr:port` and dispatches each
-// call to a Bridge. fusa:req REQ-BRIDGE-GRPC-008
+// call to a Bridge.
+// fusa:req REQ-BRIDGE-GRPC-008
 class Server {
 public:
     explicit Server(std::shared_ptr<Bridge> bridge);
