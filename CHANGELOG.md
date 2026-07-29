@@ -931,6 +931,35 @@ ASan+UBSan clean. `ROADMAP.md` checked off.
 - CI: new `release.yml` workflow attaches an SBOM and build provenance
   (`cpfusa release`) to every `v*` release tag (§20.5 supply-chain integrity).
 
+## [0.1.2] — 2026-06-19
+
+### Fixed
+
+- `relay::INode::close()` is now `noexcept` (per this codebase's own
+  convention of never throwing from `close()`); `dds::adapt()`'s `close()`
+  override updated to match.
+- `DdsErrorCategory::equivalent()` gained three more §5.2 `dds::Errc` →
+  `relay::Errc` mappings: `sample_rejected`/`resource_limits` →
+  `payload_too_large`, `loan_buffer` → `closed`.
+- `cpp-dds capabilities` no longer advertises `ILoaningPublisher` as an
+  optional interface it does not yet implement.
+
+## [0.1.1] — 2026-06-19
+
+### Changed
+
+- Full RELAY spec v1.10 compliance pass:
+  - `kRelaySpecVersion` bumped `1.7` → `1.10` (`kSpecVersion` kept as a
+    legacy alias).
+  - `relay::INode::send()` and `relay::ICaller::call()` now take a
+    `relay::Context` (deadline/cancellation) instead of a bare timeout —
+    `dds::adapt()`'s `send()` propagates `ctx.done()` as `ErrTimeout()`
+    before attempting the write.
+  - `DdsErrorCategory` gained an `equivalent()` override mapping
+    `dds::Errc` values to their `relay::Errc` counterparts (§5.2), so
+    `std::error_code` values from this library compare equal to the
+    matching RELAY sentinel via `error_condition`.
+
 ## [0.1.0] — 2026-06-19
 
 ### Added
