@@ -80,6 +80,7 @@
 namespace dds::bridge::wan {
 
 // ── Wire frame type + JSON codec (fusa:req REQ-BRIDGE-WAN-001) ────────────────
+// fusa:req REQ-BRIDGE-WAN-001
 
 // WireFrame is the per-frame message: a topic name plus an opaque payload.
 // Field names ("t", "p") and order match go-DDS's unexported wireFrame
@@ -97,6 +98,7 @@ std::string to_json(const WireFrame& f);
 bool         from_json(const std::string& text, WireFrame& out);
 
 // ── Errors (fusa:req REQ-BRIDGE-WAN-002 REQ-BRIDGE-WAN-004) ───────────────────
+// fusa:req REQ-BRIDGE-WAN-002 REQ-BRIDGE-WAN-004
 
 enum class Errc : int {
     frame_too_large = 1, // a length-prefixed frame (data or auth) exceeded its cap
@@ -119,6 +121,7 @@ inline std::error_code ErrUnauthorized() noexcept { return make_error_code(Errc:
 inline std::error_code ErrInvalidFrame() noexcept { return make_error_code(Errc::invalid_frame); }
 
 // ── Byte-stream abstraction (fusa:req REQ-BRIDGE-WAN-002 REQ-BRIDGE-WAN-004) ──
+// fusa:req REQ-BRIDGE-WAN-002 REQ-BRIDGE-WAN-004
 //
 // Mirrors Go's io.Writer/io.Reader closely enough that the frame codec
 // (write_frame/read_frame/write_auth/read_auth) can be unit-tested with
@@ -146,6 +149,7 @@ std::error_code write_auth(const WriteFn& w, const std::string& token);
 std::error_code read_auth(const ReadFn& r, std::string& out);
 
 // ── Options (fusa:req REQ-BRIDGE-WAN-003) ─────────────────────────────────────
+// fusa:req REQ-BRIDGE-WAN-003
 
 struct Options {
     // topics: DDS topic names to forward. Only used by client Bridges
@@ -169,6 +173,7 @@ struct Options {
 };
 
 // ── Bridge (fusa:req REQ-BRIDGE-WAN-005 REQ-BRIDGE-WAN-006 REQ-BRIDGE-WAN-007) ──
+// fusa:req REQ-BRIDGE-WAN-005 REQ-BRIDGE-WAN-006 REQ-BRIDGE-WAN-007
 
 // Bridge is a WAN bridge (server or client side). Create a server Bridge
 // with Bridge::serve and a client Bridge with Bridge::connect. Safe for

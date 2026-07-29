@@ -96,6 +96,7 @@
 namespace dds::bridge::grpc {
 
 // ── Message types (fusa:req REQ-BRIDGE-GRPC-001) ──────────────────────────────
+// fusa:req REQ-BRIDGE-GRPC-001
 
 // SubscribeRequest is the request message for the Subscribe RPC.
 struct SubscribeRequest {
@@ -123,6 +124,7 @@ struct PublishAck {
 };
 
 // ── JSON codec (fusa:req REQ-BRIDGE-GRPC-002) ─────────────────────────────────
+// fusa:req REQ-BRIDGE-GRPC-002
 //
 // Field names and shapes match go-DDS's grpc.go struct tags exactly:
 // SubscribeRequest{topic}, PublishRequest{topic,payload}, Sample{topic,
@@ -142,6 +144,7 @@ bool from_json(const std::string& text, Sample& out);
 bool from_json(const std::string& text, PublishAck& out);
 
 // ── Status (fusa:req REQ-BRIDGE-GRPC-003) ─────────────────────────────────────
+// fusa:req REQ-BRIDGE-GRPC-003
 //
 // Numeric values match google.golang.org/grpc/codes exactly, so a payload
 // carrying one of these is drop-in compatible with a real gRPC status
@@ -168,6 +171,7 @@ struct Status {
 };
 
 // ── Filter / Transform (fusa:req REQ-BRIDGE-GRPC-004) ─────────────────────────
+// fusa:req REQ-BRIDGE-GRPC-004
 
 // FilterFunc decides whether to forward a sample. Return false to drop it.
 using FilterFunc = std::function<bool(const std::string& topic, const std::vector<uint8_t>& payload)>;
@@ -179,6 +183,7 @@ using TransformFunc = std::function<std::optional<std::vector<uint8_t>>(
     const std::string& topic, const std::vector<uint8_t>& payload)>;
 
 // ── Options (fusa:req REQ-BRIDGE-GRPC-004) ────────────────────────────────────
+// fusa:req REQ-BRIDGE-GRPC-004
 
 struct Options {
     // auth_token, if non-empty, requires every RPC to carry the header
@@ -237,6 +242,7 @@ public:
 };
 
 // ── Bridge (fusa:req REQ-BRIDGE-GRPC-005 REQ-BRIDGE-GRPC-006 REQ-BRIDGE-GRPC-007) ──
+// fusa:req REQ-BRIDGE-GRPC-005 REQ-BRIDGE-GRPC-006 REQ-BRIDGE-GRPC-007
 
 // Bridge wraps a dds::IParticipant and implements the three DDSBridge RPCs
 // as plain C++ methods (no networking) plus lazy subscriber/publisher

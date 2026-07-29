@@ -311,6 +311,7 @@ public:
     // a TSN stream's MaxFragPayload when set and nonzero, otherwise
     // fragment.hpp's default kMaxFragmentPayload. Matches go-DDS's
     // rtpsWriter.fragmentSize.
+    // fusa:req REQ-TSN-005
     int fragment_size() const noexcept {
         if (tsn_stream_ && tsn_stream_->max_frag_payload > 0) return tsn_stream_->max_frag_payload;
         return static_cast<int>(kMaxFragmentPayload);
@@ -359,6 +360,7 @@ public:
         // tx_offset (nanoseconds since the TAI epoch; 0 = send
         // immediately). Matches go-DDS's Write() txTimeNS computation:
         // next interval boundary (relative to CLOCK_TAI) plus tx_offset.
+        // fusa:req REQ-TSN-004
         uint64_t tx_time_ns = 0;
         if (tsn_stream_ && tsn_stream_->tx_offset.count() > 0 && tsn_stream_->interval.count() > 0) {
             uint64_t tai_now = 0;
