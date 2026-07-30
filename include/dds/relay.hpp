@@ -4,7 +4,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 // relay.hpp — RELAY spec types shared across all protocol implementations.
-// Mirrors the RELAY Go package spec v1.11.
+// Mirrors the RELAY Go package spec v2.0.
 
 #pragma once
 
@@ -25,7 +25,7 @@ namespace relay {
 // ── Spec version ─────────────────────────────────────────────────────────────
 
 // fusa:req REQ-RELAY-020
-inline constexpr const char* kRelaySpecVersion = "1.11";
+inline constexpr const char* kRelaySpecVersion = "2.0";
 // Legacy alias kept so dds::kSpecVersion (which reads from relay) still works.
 inline constexpr const char* kSpecVersion      = kRelaySpecVersion;
 

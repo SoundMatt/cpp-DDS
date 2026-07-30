@@ -342,33 +342,23 @@ module M {
     REQUIRE(gr.source->find("v.inner.a") != std::string::npos);
 }
 
-TEST_CASE("idl: generate emits a cycle-guard comment for self-referential structs, "
-          "not infinite recursion",
+TEST_CASE("idl: generate fails loudly for self-referential structs, "
+          "not infinite recursion and not a silent TODO gap",
           "[idl][gen]") {
     // A directly self-referential struct field is not itself valid IDL
     // (there is no indirection/pointer concept in this grammar subset),
     // but a struct referencing itself via a sequence is syntactically
     // legal and must not hang the generator.
     //
-    // NOTE on a confirmed, deliberate divergence from go-DDS here: go-DDS's
-    // *own* Generate() actually returns an error for this exact input
-    // (confirmed against a fresh clone) -- its generator joins a struct's
-    // field-expansion statements with `"; "` onto a single Go source line,
-    // and a `// TODO: ... (cyclic struct Node)` comment landing mid-line
-    // comments out everything after it on that line (including the `for`
-    // loop's closing `}`), leaving unbalanced braces that gofmt rejects.
-    // This C++ port emits one statement per source line (see gen.cpp's
-    // write_lines()), so the analogous TODO comment sits on its own line
-    // and never swallows subsequent code -- generation succeeds here,
-    // producing valid (if functionally incomplete for the guarded field)
-    // C++. This is treated as an accidental go-DDS formatting bug rather
-    // than a semantic the port must reproduce; not exercised by any real
-    // DDS topic-type IDL (self-referential-via-container types are rare
-    // outside recursive tree-shaped data).
+    // The generator cannot emit complete (de)serialization for a cyclic
+    // struct, so it MUST fail loudly rather than silently emitting a
+    // `// TODO: ... (cyclic struct Node)` gap that produces asymmetric,
+    // lossy wire encoding presented as working output (see cpp-DDS-06).
     const char* src = "struct Node { sequence<Node> children; };";
     ParseResult pr = parse_string(src);
     REQUIRE(pr.ok());
     GenerateResult gr = generate(*pr.module);
-    REQUIRE(gr.ok());
-    REQUIRE(gr.source->find("cyclic struct") != std::string::npos);
+    REQUIRE_FALSE(gr.ok());
+    REQUIRE(gr.error.has_value());
+    REQUIRE(gr.error->find("cyclic struct") != std::string::npos);
 }

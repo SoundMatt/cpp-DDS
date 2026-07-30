@@ -23,7 +23,7 @@
 - [x] `cpp-dds` CLI (version, conform, convert)
 - [x] CI matrix: Ubuntu / macOS / Windows, C++17 and C++20
 - [x] Coverage, DCO, SARIF upload
-- [x] RELAY spec v1.10 conformance (current pin: v1.11, see §20 continuous conformance above)
+- [x] RELAY spec v2.0 conformance (current pin: v2.0, see §20 continuous conformance above)
 
 ---
 
@@ -484,7 +484,7 @@ it:
       dispatch (unlike Go's structural interface satisfaction) cannot have two unrelated
       base classes both declare a `metrics()` method with different return types on the
       same derived class, and `dds::mock::IMockParticipant` already implements
-      `relay::IMetricsProvider::metrics()` (RELAY spec §9.1, added in v1.13), the new
+      `relay::IMetricsProvider::metrics()` (RELAY spec §9.1), the new
       DDS-package-scoped accessor is named `dds_metrics()` instead — see dds.hpp's
       "Metrics providers" section for the full rationale.
       `discovery_metrics()`/`topic_metrics()` have no RELAY-generic counterpart and keep
@@ -520,7 +520,7 @@ it:
       `dds::adapt()`'s `relay::INode` bridge or the `cpp-dds` CLI's `optional_interfaces`
       capabilities list; that consumption/export layer is go-DDS's `monitor`/`admin`
       equivalent (Tier 5, still deferred).
-- [ ] `IDrainer::close_with_drain()` on mock participant
+- [x] `IDrainer::close_with_drain()` on mock participant
 - [x] `ILoaningPublisher` (zero-copy loan/commit) backed by a pool allocator;
       `ErrLoanBuffer` for exhausted or mismatched loans (go-DDS: `pool`, 139 LOC).
       **Done:** Tier-1 phase 9 ("Loan integration", v0.12.0) implemented

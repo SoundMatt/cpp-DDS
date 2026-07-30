@@ -43,7 +43,7 @@ jobs:
         working-directory: cpp-DDS
         run: |
           ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 \
-            --asil ASIL-B --project-version "${GITHUB_REF_NAME#v}" --force || true
+            --asil ASIL-B --project-version "${GITHUB_REF_NAME#v}" --force
 
       - name: cpfusa release (SBOM + provenance + artifact manifest)
         working-directory: cpp-DDS
