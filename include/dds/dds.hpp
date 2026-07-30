@@ -34,7 +34,9 @@ namespace dds {
 
 // ── Spec version ─────────────────────────────────────────────────────────────
 
-inline constexpr const char* kSpecVersion = "1.11";
+// Single source of truth: alias relay::kRelaySpecVersion so the DDS and
+// RELAY spec versions can never drift apart.
+inline constexpr const char* kSpecVersion = relay::kRelaySpecVersion;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

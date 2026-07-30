@@ -1,13 +1,13 @@
 # cpp-DDS — Claude session guide
 
 Repo: `github.com/SoundMatt/cpp-DDS`
-Local path: `/Users/matt/Documents/Coding/SoundMatt/cpp-DDS`
+Local path: repository root (this checkout)
 
 ## Project overview
 
 A certified, multi-industry C++17 DDS (Data Distribution Service) pub/sub library targeting
 automotive, aerospace, medical, industrial, robotics, and cloud deployments.
-RELAY spec v1.11 conformant.
+RELAY spec v2.0 conformant.
 
 | File/Directory | What it is |
 |---|---|
@@ -69,12 +69,12 @@ COMMIT
 
 ## RELAY spec
 
-The canonical reference is `/Users/matt/Documents/Coding/SoundMatt/RELAY/spec/relay-spec.md`.
+The canonical reference is `../RELAY/spec/relay-spec.md`.
 DDS section: §8.2 (interface contract), §15.2 (canonical types), §15.7.2 (to/from message).
 
 ## go-DDS reference
 
-The Go implementation lives at `/Users/matt/Documents/Coding/SoundMatt/go-DDS`.
+The Go implementation lives at `../go-DDS`.
 Use it as behavioral reference when implementing a new feature.
 
 ## Autonomous operation

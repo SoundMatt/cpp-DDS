@@ -6,6 +6,51 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.25.1] — 2026-07-30
+
+### Fixed
+
+- `kRelaySpecVersion`/`kSpecVersion` bumped from stale `"1.11"` to `"2.0"`,
+  matching the governing RELAY spec; CLI `version`/`capabilities` output,
+  header comments, and `CLAUDE.md` updated to match (was mis-gating any
+  conformance harness keying on declared version).
+- `dds::kSpecVersion` is now an alias of `relay::kRelaySpecVersion` instead of
+  an independently hardcoded literal, so the two can no longer drift apart
+  (the header comment claiming this was already true was false).
+- IDL code generator (`src/idl/gen.cpp`) now fails loudly (throws, surfaced as
+  `GenerateResult::error`) instead of silently emitting `// TODO: encode/decode`
+  comments for nil sequence/array element types, unresolved struct references,
+  and cyclic structs — generated marshalling code no longer silently drops
+  fields with no compile- or run-time signal.
+- CLI `capabilities` now advertises `"rtps"` alongside `"mock"` under
+  `transports`, and `"loaning"`/`"tsn"` under `features` (RELAY spec §12.2
+  values), reflecting shipped functionality that was previously under-reported.
+- `from_message` no longer silently discards a malformed/wrong-length
+  `dds.writer_guid`: the GUID is cleared and `ErrSampleRejected` is returned
+  instead of yielding a partially-populated GUID with no error.
+- `ROADMAP.md`: checked off `IDrainer::close_with_drain()` (already shipped
+  in the mock participant and advertised by the CLI) and removed contradictory
+  spec-version references (v1.10/v1.11/v1.13 mix), aligning on v2.0.
+- `CLAUDE.md`: replaced hardcoded `/Users/matt/...` absolute paths with
+  repo-relative paths and corrected the stale "v1.11 conformant" claim.
+- CI: removed `|| true` masking from `cpfusa init` steps in `ci.yml` and
+  `release.yml` (a failure there was silently swallowed) and aligned the
+  pinned `--project-version` passed to `cpfusa init` with the actual project
+  version (`0.5.0` → `0.25.0`/current).
+
+  Two related sub-changes proposed in the same audit finding were evaluated
+  and **not** applied because they would have made the CI job fail on every
+  run rather than fixing anything: raising `cpfusa trace`'s `--sec-tested`
+  gate from 96 to 100 (measured real coverage against the loaded requirements
+  registry is 96.7%, not 100% — verified locally by building the pinned
+  cpp-FuSa v0.17.1 and running `cpfusa trace` against this repo), and
+  switching `cpfusa cyber --write` to a `--check` flag that does not exist on
+  the pinned cpp-FuSa CLI (verified by inspecting `cpp-FuSa`'s `cyber`
+  subcommand definition at v0.17.1/v0.17.2 — only `--strict`/`--write` exist).
+  Both remain open; closing them needs either an actual security-test-coverage
+  pass or a committed-baseline-plus-diff CI step (and/or a cpp-FuSa feature
+  addition for a real `--check` mode).
+
 ## [0.25.0] — 2026-07-28
 
 ### Added

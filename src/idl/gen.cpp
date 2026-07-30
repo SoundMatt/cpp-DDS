@@ -248,8 +248,7 @@ private:
             case TypeKind::string: out.push_back("e.write_string(" + ref + ");"); return;
             case TypeKind::sequence: {
                 if (!ts.elem_type) {
-                    out.push_back("// TODO: encode " + ref + " (nil sequence elem type)");
-                    return;
+                    throw GenerateFailure{"cannot encode " + ref + ": sequence has no element type"};
                 }
                 if (ts.elem_type->kind == TypeKind::octet) {
                     out.push_back("e.write_bytes(" + ref + ");");
@@ -264,8 +263,7 @@ private:
             }
             case TypeKind::array: {
                 if (!ts.elem_type) {
-                    out.push_back("// TODO: encode " + ref + " (nil array elem type)");
-                    return;
+                    throw GenerateFailure{"cannot encode " + ref + ": array has no element type"};
                 }
                 std::string elem_var = next_tmp("elem");
                 out.push_back("for (const auto& " + elem_var + " : " + ref + ") {");
@@ -281,13 +279,11 @@ private:
                 }
                 const Struct* s = find_struct(ts.ref_name);
                 if (s == nullptr) {
-                    out.push_back("// TODO: encode " + ref + " (unknown struct " + ts.ref_name + ")");
-                    return;
+                    throw GenerateFailure{"cannot encode " + ref + ": unknown struct " + ts.ref_name};
                 }
                 std::string bare = bare_ref_name(ts.ref_name);
                 if (visited_.count(bare) != 0) {
-                    out.push_back("// TODO: encode " + ref + " (cyclic struct " + ts.ref_name + ")");
-                    return;
+                    throw GenerateFailure{"cannot encode " + ref + ": cyclic struct " + ts.ref_name};
                 }
                 visited_.insert(bare);
                 for (const auto& f : s->fields) {
@@ -297,7 +293,7 @@ private:
                 return;
             }
         }
-        out.push_back("// TODO: encode " + ref);
+        throw GenerateFailure{"cannot encode " + ref + ": unsupported type"};
     }
 
     void append_decode(std::vector<std::string>& out, TypeSpec ts, const std::string& dest) {
@@ -316,8 +312,7 @@ private:
             case TypeKind::string: append_primitive_decode(out, "read_string", dest); return;
             case TypeKind::sequence: {
                 if (!ts.elem_type) {
-                    out.push_back("// TODO: decode " + dest + " (nil sequence elem type)");
-                    return;
+                    throw GenerateFailure{"cannot decode " + dest + ": sequence has no element type"};
                 }
                 if (ts.elem_type->kind == TypeKind::octet) {
                     append_primitive_decode(out, "read_bytes", dest);
@@ -335,8 +330,7 @@ private:
             }
             case TypeKind::array: {
                 if (!ts.elem_type) {
-                    out.push_back("// TODO: decode " + dest + " (nil array elem type)");
-                    return;
+                    throw GenerateFailure{"cannot decode " + dest + ": array has no element type"};
                 }
                 std::string elem_var = next_tmp("elem");
                 out.push_back("for (auto& " + elem_var + " : " + dest + ") {");
@@ -355,13 +349,11 @@ private:
                 }
                 const Struct* s = find_struct(ts.ref_name);
                 if (s == nullptr) {
-                    out.push_back("// TODO: decode " + dest + " (unknown struct " + ts.ref_name + ")");
-                    return;
+                    throw GenerateFailure{"cannot decode " + dest + ": unknown struct " + ts.ref_name};
                 }
                 std::string bare = bare_ref_name(ts.ref_name);
                 if (visited_.count(bare) != 0) {
-                    out.push_back("// TODO: decode " + dest + " (cyclic struct " + ts.ref_name + ")");
-                    return;
+                    throw GenerateFailure{"cannot decode " + dest + ": cyclic struct " + ts.ref_name};
                 }
                 visited_.insert(bare);
                 for (const auto& f : s->fields) {
@@ -371,7 +363,7 @@ private:
                 return;
             }
         }
-        out.push_back("// TODO: decode " + dest);
+        throw GenerateFailure{"cannot decode " + dest + ": unsupported type"};
     }
 
     void append_primitive_decode(std::vector<std::string>& out, const std::string& reader,

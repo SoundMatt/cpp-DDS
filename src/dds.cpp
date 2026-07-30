@@ -117,8 +117,15 @@ std::pair<Sample, std::error_code> from_message(const relay::Message& m) {
     s.sequence_number = m.seq;
 
     auto it = m.meta.find("dds.writer_guid");
-    if (it != m.meta.end())
-        hex_to_guid(it->second, s.writer_guid);
+    if (it != m.meta.end()) {
+        // A malformed/wrong-length writer_guid must not silently yield a
+        // partially populated GUID: clear it and surface the failure so
+        // sample provenance loss is observable to the caller.
+        if (!hex_to_guid(it->second, s.writer_guid)) {
+            s.writer_guid = Guid{};
+            return {s, ErrSampleRejected()};
+        }
+    }
 
     return {s, {}};
 }

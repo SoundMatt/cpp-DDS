@@ -262,7 +262,7 @@ jobs:
 
       - name: cpfusa init
         working-directory: cpp-DDS
-        run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.5.0 --force || true
+        run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.25.0 --force
 
       # cpfusa init's default .fusa.json only scans src/ and include/ (§1.2.1
       # sourceDirs), and always writes a fresh, empty .fusa-reqs.json — never
@@ -320,11 +320,21 @@ jobs:
       # registry regardless of actual coverage).
       - name: cpfusa trace (requirements traceability)
         working-directory: cpp-DDS
+        # NOTE: real measured sec-tested coverage against the loaded registry is
+        # 96.7% (119/123), not 100% — verified by running cpfusa trace locally.
+        # Raising this to 100 without first adding the missing //fusa:test
+        # annotations would make this step fail on every run. Left at 96
+        # pending an actual test-coverage pass (see cpp-DDS-14 finding (c)).
         run: ../cpp-FuSa/build/cpfusa trace --dir . --req-coverage 100 --sec-tested 96
 
       # §20.1 item 2 requires the full x-FuSa lifecycle, not a subset: standard
       # check + traceability (above) plus cybersecurity analysis, dependency
       # vulnerability scan, and tool qualification — all gating.
+      # NOTE: cpp-FuSa v0.17.1's `cyber` subcommand only supports --strict and
+      # --write (verified against a local build of the pinned tag) — there is
+      # no --check/diff flag. Left at --write; genuine drift detection would
+      # require committing a baseline cyber-report.json and diffing it in CI,
+      # or a cpp-FuSa feature addition, either of which is out of scope here.
       - name: cpfusa cyber (cybersecurity analysis, ISO 21434)
         working-directory: cpp-DDS
         run: ../cpp-FuSa/build/cpfusa cyber --write
@@ -393,7 +403,7 @@ jobs:
 
       - name: cpfusa init
         working-directory: cpp-DDS
-        run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.5.0 --force || true
+        run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.25.0 --force
 
       - name: Generate SARIF report
         working-directory: cpp-DDS
