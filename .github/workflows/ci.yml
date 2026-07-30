@@ -246,7 +246,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: SoundMatt/cpp-FuSa
-          ref: v0.17.1
+          ref: v0.18.0
           path: cpp-FuSa
 
       - name: Install tools
@@ -330,11 +330,12 @@ jobs:
       # §20.1 item 2 requires the full x-FuSa lifecycle, not a subset: standard
       # check + traceability (above) plus cybersecurity analysis, dependency
       # vulnerability scan, and tool qualification — all gating.
-      # NOTE: cpp-FuSa v0.17.1's `cyber` subcommand only supports --strict and
-      # --write (verified against a local build of the pinned tag) — there is
-      # no --check/diff flag. Left at --write; genuine drift detection would
-      # require committing a baseline cyber-report.json and diffing it in CI,
-      # or a cpp-FuSa feature addition, either of which is out of scope here.
+      # NOTE: cpp-FuSa's `cyber` subcommand still only supports --strict and
+      # --write as of v0.18.0 (re-verified against a local build of the
+      # pinned tag) — there is no --check/diff flag. Left at --write; genuine
+      # drift detection would require committing a baseline cyber-report.json
+      # and diffing it in CI, or a cpp-FuSa feature addition, either of which
+      # is out of scope here.
       - name: cpfusa cyber (cybersecurity analysis, ISO 21434)
         working-directory: cpp-DDS
         run: ../cpp-FuSa/build/cpfusa cyber --write
@@ -387,7 +388,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: SoundMatt/cpp-FuSa
-          ref: v0.17.1
+          ref: v0.18.0
           path: cpp-FuSa
 
       - name: Install tools
