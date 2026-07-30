@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: SoundMatt/cpp-FuSa
-          ref: v0.17.1
+          ref: v0.18.0
           path: cpp-FuSa
 
       - name: Install tools
