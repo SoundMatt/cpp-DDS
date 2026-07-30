@@ -220,7 +220,7 @@ jobs:
           go-version: 'stable'
 
       - name: Install relay tool
-        run: go install github.com/SoundMatt/RELAY/cmd/relay@latest
+        run: go install github.com/SoundMatt/RELAY/v2/cmd/relay@v2.0.4
 
       - name: RELAY conformance gate
         run: relay conform --strict ./build/cli/cpp-dds
