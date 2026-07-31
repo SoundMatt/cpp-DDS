@@ -152,10 +152,27 @@ public:
         }
 
         auto it = buffers_.find(key);
+        if (it != buffers_.end()) {
+            // A previously-seen reassembly key fixes the buffer geometry
+            // (data_size and fragment_size) for the whole sequence. Reject
+            // any later fragment that disagrees: the buffer and the
+            // received-index bitmap were both sized from the first
+            // fragment's data_size/fragment_size, so honouring a fragment
+            // with a larger data_size (or a smaller fragment_size, which
+            // raises the fragment count) would let the offset arithmetic
+            // below write past the end of buf.data / buf.received_mask — a
+            // heap overflow driven entirely by an unauthenticated peer.
+            if (f.data_size != it->second.data_size ||
+                f.fragment_size != it->second.fragment_size) {
+                return std::nullopt;
+            }
+        }
         if (it == buffers_.end()) {
             Buffer buf;
             buf.data.assign(f.data_size, uint8_t{0});
-            buf.total   = total;
+            buf.total          = total;
+            buf.data_size      = f.data_size;
+            buf.fragment_size  = f.fragment_size;
             buf.created = now;
             // received_mask tracks which 0-based fragment indices have
             // actually been written, so a retransmitted/duplicate fragment
@@ -241,6 +258,8 @@ private:
         std::vector<bool>                     received_mask; // per-fragment-index arrival, sized to `total`
         uint32_t                              received{0};   // count of *distinct* indices received so far
         uint32_t                              total{0};
+        uint32_t                              data_size{0};     // fixed by the first fragment for this key
+        uint16_t                              fragment_size{0}; // fixed by the first fragment for this key
         std::chrono::steady_clock::time_point created{};
     };
 

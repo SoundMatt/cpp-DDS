@@ -24,6 +24,7 @@ add_executable(cppdds_tests
     test_cdr.cpp
     test_idl.cpp
     test_ddstool_cli.cpp
+    test_cli_main.cpp
     idl_roundtrip/test_idl_roundtrip.cpp
     test_tsn.cpp
     test_taprio.cpp
@@ -41,6 +42,7 @@ target_link_libraries(cppdds_tests
     PRIVATE
         cppdds_lib
         ddstool_cli
+        cppdds_cli
         Catch2::Catch2WithMain
 )
 

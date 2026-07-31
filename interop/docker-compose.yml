@@ -1,6 +1,8 @@
 # Interop test environment: cpp-DDS (host) <-> CycloneDDS (container)
 #
 # Usage:
+#   docker compose -f interop/docker-compose.yml build  # first run / after a
+#                                                         # CYCLONEDDS_VERSION bump
 #   docker compose -f interop/docker-compose.yml up -d cyclone-peer
 #   cmake -B build-interop -DCPPDDS_INTEROP_TESTS=ON -G Ninja
 #   cmake --build build-interop --parallel
@@ -20,13 +22,26 @@
 # doesn't expose as conveniently as go-DDS's own DDS_PEERS docker setup
 # (see docker-compose.host.yml's precedent in go-DDS's own quickstart repo).
 # host networking is Linux-only, matching CI's ubuntu-22.04 runner.
+#
+# `image:`/`build:` on every service below name and build the SAME image
+# (see Dockerfile.cyclonedds's own doc comment for why this is built from
+# eclipse-cyclonedds/cyclonedds's source rather than pulled: no published
+# `eclipse-cyclonedds/cyclonedds` image exists anywhere). Compose builds it
+# once (tagged `cppdds-interop-cyclonedds:local`) and every service reuses
+# that tag rather than triggering three independent builds.
+
+x-cyclonedds-image: &cyclonedds-image
+  image: cppdds-interop-cyclonedds:local
+  build:
+    context: .
+    dockerfile: Dockerfile.cyclonedds
 
 services:
   # CycloneDDS peer — publishes and subscribes on the DDS domain, exercising
   # both directions of the wire against a real cpp-DDS Participant. This is
   # the service the "bidirectional echo" interop test expects.
   cyclone-peer:
-    image: eclipse-cyclonedds/cyclonedds:latest
+    <<: *cyclonedds-image
     network_mode: host
     environment:
       - DDS_DOMAIN=0
@@ -41,7 +56,7 @@ services:
   # Minimal CycloneDDS subscriber that receives from the cpp-DDS publisher.
   # Used by the "cpp-DDS publisher reaches a live CycloneDDS subscriber" test.
   cyclone-sub:
-    image: eclipse-cyclonedds/cyclonedds:latest
+    <<: *cyclonedds-image
     network_mode: host
     environment:
       - DDS_DOMAIN=0
@@ -51,7 +66,7 @@ services:
   # Minimal CycloneDDS publisher for the "cpp-DDS subscriber receives from a
   # live CycloneDDS publisher" test.
   cyclone-pub:
-    image: eclipse-cyclonedds/cyclonedds:latest
+    <<: *cyclonedds-image
     network_mode: host
     environment:
       - DDS_DOMAIN=0

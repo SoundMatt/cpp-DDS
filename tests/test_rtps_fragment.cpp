@@ -469,6 +469,91 @@ TEST_CASE("FragmentAssembler keys reassembly by full writer GUID, not entity id 
     CHECK(*a_result == wrapped);
 }
 
+TEST_CASE("FragmentAssembler rejects a later fragment that disagrees with the frozen data_size/fragment_size "
+          "for its key instead of writing past the buffer sized from the first fragment",
+          "[rtps][fragment][security]") {
+    // Regression test for a remote heap buffer overflow: the reassembly
+    // buffer (buf.data) and its received_mask are both sized from the
+    // *first* fragment seen for a {writer GUID, seq} key. Before this fix,
+    // a later fragment for the same key was free to claim a different
+    // (larger) data_size/fragment_size, and the `offset >= f.data_size`
+    // bounds guard used that forged, current fragment's data_size rather
+    // than the buffer's actual allocated size — so std::copy wrote past
+    // the end of buf.data (and the received_mask index went past its
+    // bitmap) driven entirely by an unauthenticated peer. Run under ASan
+    // (see .github/workflows/ci.yml's `sanitizers` job), the pre-fix
+    // version of this test aborts with heap-buffer-overflow; post-fix it
+    // must instead reject the malformed fragment and leave the legitimate,
+    // in-progress reassembly for that key completely unaffected.
+    auto wrapped = hex_to_bytes(kCdrWrappedHex);
+    auto frags   = split_into_fragments_n(sample_writer_entity(), SequenceNumber{0, 42}, wrapped, 5);
+    REQUIRE(frags.size() == 4);
+    // Sanity-check the geometry this attack tries to violate: 4 fragments
+    // of fragment_size 5 covering data_size 17 bytes total.
+    REQUIRE(frags[0].fragment_size == 5);
+    REQUIRE(frags[0].data_size == 17);
+
+    FragmentAssembler fa;
+
+    // First fragment establishes the buffer geometry: data_size=17,
+    // fragment_size=5, total=4, buf.data.size()==17.
+    CHECK_FALSE(fa.receive(sample_writer_guid(), frags[0]).has_value());
+
+    // Attack fragment: same reassembly key (writer GUID + sequence
+    // number), but a forged, much larger data_size/fragment_size and a
+    // fragment_starting_num placing its write offset well past the
+    // legitimate 17-byte buffer while still satisfying its own (forged)
+    // `offset >= f.data_size` bounds check.
+    DataFrag attack;
+    attack.writer_entity_id      = sample_writer_entity();
+    attack.writer_seq_num        = SequenceNumber{0, 42}; // same key as frags[0]
+    attack.fragment_starting_num = 1000;                  // frag_idx = 999
+    attack.fragments_in_submsg   = 1;
+    attack.fragment_size         = 64;    // disagrees with the frozen 5
+    attack.data_size             = 65536; // disagrees with the frozen 17
+    attack.payload.assign(64, 0x41);      // offset = 999*64 = 63936 < 65536
+
+    CHECK_FALSE(fa.receive(sample_writer_guid(), attack).has_value());
+
+    // The legitimate in-progress reassembly for this key must be entirely
+    // unaffected by the rejected attack fragment: feeding the remaining
+    // genuine fragments still completes it correctly.
+    CHECK_FALSE(fa.receive(sample_writer_guid(), frags[1]).has_value());
+    CHECK_FALSE(fa.receive(sample_writer_guid(), frags[2]).has_value());
+    auto result = fa.receive(sample_writer_guid(), frags[3]);
+    REQUIRE(result.has_value());
+    CHECK(*result == wrapped);
+}
+
+TEST_CASE("FragmentAssembler rejects a later fragment with a smaller fragment_size for the same key",
+          "[rtps][fragment][security]") {
+    // Same defect class as the previous test, from the other direction: a
+    // *smaller* fragment_size on a later fragment raises the computed
+    // `total` (ceil(data_size/fragment_size)) beyond buf.received_mask's
+    // original size, so `received_mask[idx] = true` for a high idx would
+    // write past the end of the bitmap. Must be rejected, not merged.
+    auto wrapped = hex_to_bytes(kCdrWrappedHex);
+    auto frags   = split_into_fragments_n(sample_writer_entity(), SequenceNumber{0, 7}, wrapped, 5);
+    REQUIRE(frags.size() == 4);
+
+    FragmentAssembler fa;
+    CHECK_FALSE(fa.receive(sample_writer_guid(), frags[0]).has_value());
+
+    DataFrag attack             = frags[1];
+    attack.fragment_size        = 1; // disagrees with the frozen 5 -> total balloons to 17
+    attack.fragment_starting_num = 16;
+    attack.payload.assign(1, 0x42);
+
+    CHECK_FALSE(fa.receive(sample_writer_guid(), attack).has_value());
+
+    // Legitimate reassembly for this key still completes correctly.
+    CHECK_FALSE(fa.receive(sample_writer_guid(), frags[1]).has_value());
+    CHECK_FALSE(fa.receive(sample_writer_guid(), frags[2]).has_value());
+    auto result = fa.receive(sample_writer_guid(), frags[3]);
+    REQUIRE(result.has_value());
+    CHECK(*result == wrapped);
+}
+
 // ── 3. End-to-end fragmentation over real loopback UDP ───────────────────────
 
 TEST_CASE("A large Writer::write is fragmented on send and reassembled on receive across two Participants",

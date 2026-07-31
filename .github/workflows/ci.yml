@@ -45,7 +45,7 @@ jobs:
             cxx: cl
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install tools (Ubuntu)
         if: runner.os == 'Linux'
@@ -55,7 +55,7 @@ jobs:
 
       - name: Set up MSVC environment (Windows)
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
 
       - name: Configure
         shell: bash
@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: build-and-test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install tools
         run: |
@@ -114,27 +114,37 @@ jobs:
   # by, any other job — it's excluded from the default build-and-test matrix
   # entirely (see interop/README.md and ROADMAP.md's "Interop testing
   # infrastructure" section) and skips gracefully (green) rather than
-  # failing when the CycloneDDS Docker image is unavailable in the runner's
-  # registry, mirroring go-DDS's own test-interop CI job exactly.
+  # failing when the CycloneDDS peer image fails to build (e.g. a runner
+  # network hiccup cloning eclipse-cyclonedds/cyclonedds), mirroring
+  # go-DDS's own test-interop CI job exactly.
   test-interop:
     name: RTPS interop (CycloneDDS, ubuntu-22.04)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y cmake ninja-build
 
-      - name: Probe Docker and CycloneDDS image
+      # There is no published `eclipse-cyclonedds/cyclonedds` image on
+      # Docker Hub or ghcr.io to `docker pull` (verified against the
+      # upstream org's empty container-package list and its own
+      # scripts/docker/README.md, which documents that name as a
+      # locally-built-only image) — see interop/Dockerfile.cyclonedds's doc
+      # comment. The probe therefore actually builds the real peer image
+      # from CycloneDDS's own upstream source instead of pulling a
+      # nonexistent tag, so this job's `available=false` branch now means
+      # "the build genuinely failed" rather than "the tag was never real".
+      - name: Probe Docker and build the CycloneDDS peer image
         id: probe
         run: |
-          if docker pull eclipse-cyclonedds/cyclonedds:latest 2>/dev/null; then
+          if docker compose -f interop/docker-compose.yml build cyclone-peer; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::CycloneDDS Docker image not available — skipping interop tests"
+            echo "::warning::Building the CycloneDDS peer image failed — skipping interop tests"
           fi
 
       - name: Start CycloneDDS peer
@@ -168,7 +178,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: build-and-test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install tools
         run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build lcov
@@ -201,7 +211,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: build-and-test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install tools
         run: sudo apt-get update -qq && sudo apt-get install -y cmake ninja-build
@@ -215,7 +225,7 @@ jobs:
           cmake --build build --parallel --target cpp-dds
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: 'stable'
 
@@ -238,12 +248,12 @@ jobs:
     needs: build-and-test
     steps:
       - name: Check out cpp-DDS
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: cpp-DDS
 
       - name: Check out cpp-FuSa
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: SoundMatt/cpp-FuSa
           ref: v0.18.0
@@ -320,11 +330,21 @@ jobs:
       # registry regardless of actual coverage).
       - name: cpfusa trace (requirements traceability)
         working-directory: cpp-DDS
-        # NOTE: real measured sec-tested coverage against the loaded registry is
-        # 96.7% (119/123), not 100% — verified by running cpfusa trace locally.
-        # Raising this to 100 without first adding the missing //fusa:test
-        # annotations would make this step fail on every run. Left at 96
-        # pending an actual test-coverage pass (see cpp-DDS-14 finding (c)).
+        # NOTE: real measured sec-tested coverage against the loaded registry was
+        # 96.7% (119/123) as of the last local `cpfusa trace` run, not 100%.
+        # Of the 4 untested requirements found at that measurement
+        # (REQ-CLI-001/002/003, REQ-SAFETY-004), REQ-CLI-001/002/003 now have
+        # real fusa:test coverage (see tests/test_cli_main.cpp) — only
+        # REQ-SAFETY-004 (the traceability requirement's own self-test) is
+        # still open. Left at 96 rather than bumped to a
+        # locally-computed-but-cpfusa-unverified number: this environment has
+        # no local cpp-FuSa checkout to actually re-run `cpfusa trace`
+        # against (see the fix landing this comment for why), so raising the
+        # gate here would be asserting a coverage percentage never actually
+        # measured against the real tool — this repo's own precedent (see
+        # "Verify Tools Against Primary Source") is to verify against the
+        # real tool/standard rather than assume. The next CI run of this job
+        # is the first real measurement against the new test file.
         run: ../cpp-FuSa/build/cpfusa trace --dir . --req-coverage 100 --sec-tested 96
 
       # §20.1 item 2 requires the full x-FuSa lifecycle, not a subset: standard
@@ -353,7 +373,7 @@ jobs:
     runs-on: ubuntu-22.04
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
       - name: Check DCO sign-off
@@ -380,12 +400,12 @@ jobs:
       security-events: write
     steps:
       - name: Check out cpp-DDS
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: cpp-DDS
 
       - name: Check out cpp-FuSa
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: SoundMatt/cpp-FuSa
           ref: v0.18.0
@@ -406,16 +426,21 @@ jobs:
         working-directory: cpp-DDS
         run: ../cpp-FuSa/build/cpfusa init --name cpp-DDS --standard iso26262 --asil ASIL-B --project-version 0.25.0 --force
 
+      # continue-on-error (not `|| true`): a crash/failure in report
+      # generation still surfaces as a red X annotated on this specific step
+      # in the Actions UI, rather than being silently swallowed, while still
+      # letting the (hashFiles-gated) upload step below proceed either way.
       - name: Generate SARIF report
         working-directory: cpp-DDS
+        continue-on-error: true
         run: |
           ../cpp-FuSa/build/cpfusa check \
             --format sarif \
             --output cpfusa.sarif \
-            --dir . || true
+            --dir .
 
       - name: Upload SARIF to GitHub Security tab
         if: hashFiles('cpp-DDS/cpfusa.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
           sarif_file: cpp-DDS/cpfusa.sarif

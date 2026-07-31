@@ -48,7 +48,11 @@ this suite from anything else registered in that build.
 ```sh
 # 1. Start a CycloneDDS peer that both publishes and subscribes, exercising
 #    both directions of the wire (see docker-compose.yml's cyclone-peer
-#    service for its exact ddsperf invocation).
+#    service for its exact ddsperf invocation). The peer image is built
+#    from eclipse-cyclonedds/cyclonedds's own upstream source the first
+#    time this runs (see Dockerfile.cyclonedds) — no image is pulled from
+#    a registry, so the first `up` takes a couple of minutes; subsequent
+#    runs reuse the cached image until CYCLONEDDS_VERSION changes.
 docker compose -f interop/docker-compose.yml up -d cyclone-peer
 
 # 2. Configure and build with the interop suite enabled.
