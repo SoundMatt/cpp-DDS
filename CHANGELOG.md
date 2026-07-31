@@ -6,6 +6,74 @@ Format: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.25.2] — 2026-07-31
+
+### Fixed
+
+- **Security (critical): remote heap buffer overflow in DATA_FRAG
+  reassembly.** `FragmentAssembler::receive` (`include/dds/rtps/fragment.hpp`)
+  sized its reassembly buffer (`Buffer::data`) and received-index bitmap
+  (`Buffer::received_mask`) from the *first* DATA_FRAG fragment seen for a
+  {writer GUID, sequence number} key, but never re-validated `data_size`/
+  `fragment_size` on later fragments for the same key. A second, malicious
+  DATA_FRAG for an already-open key could claim a different (larger)
+  `data_size`/smaller `fragment_size`, and the `offset >= f.data_size`
+  bounds guard used that forged, *current* fragment's `data_size` instead of
+  the buffer's actual allocated size — driving `std::copy` and
+  `received_mask` indexing past the end of heap-allocated buffers, from an
+  unauthenticated remote peer with no prior pairing. `Buffer` now freezes
+  `data_size`/`fragment_size` on first sight of a key and rejects
+  (`std::nullopt`) any later fragment for that key that disagrees, so
+  `offset < f.data_size` always implies `offset < buf.data.size()` for the
+  buffer's entire lifetime — eliminating the overflow by construction, not
+  by an added assertion. Added two regression tests in
+  `tests/test_rtps_fragment.cpp` (forged larger `data_size` at a high
+  `fragment_starting_num`, and a forged smaller `fragment_size` that
+  balloons the fragment count past the bitmap's size) that reproduce a real
+  ASan `heap-buffer-overflow` abort against the pre-fix code and pass
+  cleanly post-fix, confirmed against a local Debug+ASan+UBSan build (see
+  `.github/workflows/ci.yml`'s `sanitizers` job for the same configuration).
+- CLI (`cli/main.cpp`) subcommand implementations (`version`/`capabilities`/
+  `status`/`conform`/`convert`) factored out into `cli/cpp_dds_cli.hpp` /
+  `cli/cpp_dds_cli.cpp` (new `cppdds_cli` static library), mirroring
+  `ddstool`'s existing `cli.hpp`/`cli.cpp`/`ddstool_cli` split, so
+  `tests/test_cli_main.cpp` can exercise real subcommand dispatch/exit-code/
+  output behavior in-process instead of only via a subprocess spawn. Closes
+  the REQ-CLI-001/REQ-CLI-002/REQ-CLI-003 test-traceability gap (previously
+  0 tests existed for the `cpp-dds` CLI's own subcommands) — REQ-SAFETY-004
+  (the traceability requirement's own self-test) remains the one open item
+  in the `fusa-asil-b` CI job's `cpfusa trace` gate (still `--sec-tested 96`;
+  see that step's updated comment — no local cpp-FuSa checkout was
+  available in this environment to re-measure and verify a higher number
+  against the real tool before asserting it in CI).
+- CI: pinned every third-party GitHub Action (`actions/checkout`,
+  `actions/setup-go`, `ilammy/msvc-dev-cmd`, `github/codeql-action/upload-sarif`)
+  to an immutable commit SHA (resolved from each action's latest stable
+  release tag via the GitHub API) instead of a moving major-version tag, for
+  supply-chain hardening.
+- CI (`test-interop` job): `eclipse-cyclonedds/cyclonedds:latest` was never
+  a real, pullable image on Docker Hub or ghcr.io — verified directly
+  against the upstream `eclipse-cyclonedds` GitHub org (empty container
+  package list) and its own `scripts/docker/README.md`, which documents
+  `cyclonedds:latest` as a locally-built-only image name. `docker pull`
+  therefore always failed, so the job's real-UDP RTPS interop steps against
+  a live CycloneDDS peer never actually ran despite the job reporting
+  green. Added `interop/Dockerfile.cyclonedds`, which builds a real
+  `ddsperf` peer from `eclipse-cyclonedds/cyclonedds`'s own upstream source
+  (pinned to released tag `11.0.1`) via its documented CMake build — build
+  verified locally (`docker compose -f interop/docker-compose.yml build` +
+  `ddsperf -h` inside the resulting image). `docker-compose.yml`'s three
+  `cyclone-*` services now `build:`/`image:` this instead of pulling the
+  dead tag; `ci.yml`'s probe step builds the image rather than pulling it,
+  so `available=false` now means "the build genuinely failed" instead of
+  "the tag was never real".
+- CI (`sarif` job): replaced `cpfusa check --format sarif ... || true` with
+  the step-level `continue-on-error: true` attribute — a crash/failure in
+  SARIF report generation now surfaces as a red X annotated on that
+  specific step in the Actions UI instead of being silently swallowed,
+  while the downstream (`hashFiles`-gated) upload step still proceeds
+  either way.
+
 ## [0.25.1] — 2026-07-30
 
 ### Fixed
