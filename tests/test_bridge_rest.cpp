@@ -786,7 +786,15 @@ TEST_CASE("Server: a malformed request line drops the connection without a crash
     RawSocket conn = raw_dial("127.0.0.1", port);
     REQUIRE(conn >= 0);
     REQUIRE(raw_send(conn, "NOTAREALREQUESTLINE\r\n\r\n"));
-    std::string resp = raw_recv_some(conn, 300ms);
+    // Was an explicit, tighter-than-default 300ms: reliably too tight on the
+    // windows-2022/msvc CI runner once this test binary grew a fifth linked
+    // library (cppdds_cli, added elsewhere in this PR) -- observed failing
+    // deterministically (empty resp, i.e. a timeout) on that platform only,
+    // not on macOS/Linux, and not related to this test's own logic. Widened
+    // to raw_recv_some's own 500ms default, already used by every other
+    // CHECK-only test in this file with no documented reason for this one
+    // to be tighter.
+    std::string resp = raw_recv_some(conn);
     raw_close(conn);
 
     CHECK(resp.rfind("HTTP/1.1 400 Bad Request", 0) == 0);
